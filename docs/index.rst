@@ -17,7 +17,7 @@ embedding-associated genes as well as high-definition cluster-associated genes.
 Key Features of SpaHDmap
 ---------------------------
 - Integrates deep learning with NMF for spatial transcriptomics analysis
-- Supports various spatial transcriptomics platforms (e.g., 10X Visium, Stereo-seq and Xenium)
+- Supports various spatial transcriptomics platforms (e.g., 10X Visium, Stereo-seq)
 - Generates interpretable high-definition embeddings and spatial clusters
 - Enables simultaneous analysis of multiple samples
 - Provides visualization tools for easy interpretation of results
