@@ -74,8 +74,8 @@ After installation, you can verify that SpaHDmap is correctly installed by runni
 
 .. code-block:: python
 
-   import SpaHDmap as map
-   print(map.__version__)
+   import SpaHDmap as hdmap
+   print(hdmap.__version__)
 
 This should print the version number of SpaHDmap without any errors.
 

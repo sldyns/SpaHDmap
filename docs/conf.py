@@ -6,15 +6,15 @@ from pathlib import Path
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here.
-import SpaHDmap as map
+import SpaHDmap as hdmap
 
 sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # -- Project information -----------------------------------------------------
 
-project = map.__name__
-author = map.__author__
-version = map.__version__
+project = hdmap.__name__
+author = hdmap.__author__
+version = hdmap.__version__
 repository_url = "https://github.com/sldyns/SpaHDmap"
 copyright = f"{datetime.now():%Y}, Xilab"
 

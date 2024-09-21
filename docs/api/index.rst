@@ -7,13 +7,13 @@ Import SpaHDmap as follows:
 
 .. code-block:: python
 
-   import SpaHDmap as map
+   import SpaHDmap as hdmap
 
 
 .. toctree::
    :maxdepth: 2
 
-   Fuser
+   Mapper
    data
    models
    

@@ -24,9 +24,9 @@ from .model import SpaHDmapUnet, GraphAutoEncoder
 from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, visualize_score
 
 
-class Fuser:
+class Mapper:
     """
-    The `Fuser` class is a runner for the SpaHDmap model.
+    The `Mapper` class is a runner for the SpaHDmap model.
 
     Parameters
     ----------
@@ -48,8 +48,8 @@ class Fuser:
         >>> results_path = 'results'
         >>> seed = 123
         >>> verbose = False
-        >>> fuser = Fuser(sections=sections, results_path=results_path, rank=rank, reference=None, verbose=verbose)
-        >>> fuser.run_SpaHDmap()
+        >>> mapper = Mapper(sections=sections, results_path=results_path, rank=rank, reference=None, verbose=verbose)
+        >>> mapper.run_SpaHDmap()
     """
 
     def __init__(self,
@@ -109,52 +109,6 @@ class Fuser:
         if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
         self._tissue_separation()
         self._crate_pseudo_spots()
-
-    def harmonize_genes(self):
-        """
-        Harmonize SVGs across all sections for multiple sections only.
-        Select top n_top_genes based on combined rankings across all sections.
-        Update spot_exp, genes, and SVGs for each section.
-        """
-        all_sections = list(self.section.values())
-
-        # Combine Moran's I results from all sections
-        combined_rankings = []
-        for section in all_sections:
-            if section.SVGs is None:
-                raise ValueError(
-                    "SVGs not calculated for all sections. Please ensure SVGs are calculated before harmonizing.")
-
-            moran_i_values = section.adata.var['moran_i'].iloc[section.SVGs]
-            rankings = pd.DataFrame({
-                'gene': section.genes[section.SVGs],
-                'moran_i': moran_i_values,
-                'rank': moran_i_values.rank(ascending=False)
-            })
-            combined_rankings.append(rankings)
-
-        # Merge rankings from all sections
-        all_rankings = pd.concat(combined_rankings, axis=0)
-
-        # Calculate mean rank for each gene across all sections
-        mean_rankings = all_rankings.groupby('gene')['rank'].mean().sort_values()
-
-        # Select top n_top_genes
-        top_genes = mean_rankings.head(n_top_genes).index.tolist()
-
-        # Update each section
-        for section in all_sections:
-            # Find indices of top genes in the current section's genes
-            top_indices = [section.genes.index(gene) for gene in top_genes if gene in section.genes]
-
-            # Update spot_exp, genes, and SVGs
-            section.spot_exp = section.spot_exp[:, top_indices]
-            section.genes = [section.genes[i] for i in top_indices]
-            section.SVGs = np.arange(len(top_indices))  # All genes are now SVGs
-
-        if self.verbose:
-            print(f"Harmonized SVGs across all sections.")
-            print(f"Number of common SVGs: {len(top_genes)}")
 
     def _tissue_separation(self):
         # Divide the tissue area into sub-tissue regions based on split size and redundancy ratio.

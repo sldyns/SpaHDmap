@@ -5,7 +5,7 @@ import numpy as np
 import scanpy as sc
 import torch
 
-import SpaHDmap as map
+import SpaHDmap as hdmap
 
 ## -------------------------------------------------------------------------------------------------
 def str2bool(v):
@@ -86,7 +86,7 @@ for idx, section in enumerate(section_list):
     adata_path = section['adata_path'] if 'adata_path' in section else None
     if adata_path is not None:
         adata = sc.read(adata_path)
-        sections.append(map.prepare_stdata(adata=adata, section_name=section_name, image_path=image_path,
+        sections.append(hdmap.prepare_stdata(adata=adata, section_name=section_name, image_path=image_path,
                                              scale_factor=tmp_scale_factor, radius=tmp_radius,
                                              swap_coord=args.swap_coord, create_mask=args.create_mask))
         continue
@@ -96,14 +96,14 @@ for idx, section in enumerate(section_list):
     spot_coord_path = section['spot_coord_path'] if 'spot_coord_path' in section else None
     spot_exp_path = section['spot_exp_path'] if 'spot_exp_path' in section else None
 
-    sections.append(map.prepare_stdata(section_name=section_name, image_path=image_path, visium_path=visium_path,
+    sections.append(hdmap.prepare_stdata(section_name=section_name, image_path=image_path, visium_path=visium_path,
                                          spot_coord_path=spot_coord_path, spot_exp_path=spot_exp_path,
                                          scale_factor=tmp_scale_factor, radius=tmp_radius, swap_coord=args.swap_coord))
 
-if args.select_svgs: map.select_svgs(sections, n_top_genes=args.n_top_genes)
+if args.select_svgs: hdmap.select_svgs(sections, n_top_genes=args.n_top_genes)
 ## -------------------------------------------------------------------------------------------------
-fuser = map.Fuser(section=sections, reference=reference, rank=args.rank,
-                    results_path=results_path, verbose=args.verbose)
+mapper = hdmap.Mapper(section=sections, reference=reference, rank=args.rank,
+                      results_path=results_path, verbose=args.verbose)
 
-fuser.run_SpaHDmap(save_model=args.save_model, save_score=args.save_score, visualize=args.visualize)
+mapper.run_SpaHDmap(save_model=args.save_model, save_score=args.save_score, visualize=args.visualize)
 

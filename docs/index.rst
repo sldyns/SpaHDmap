@@ -1,5 +1,5 @@
-SpaHDmap: interpretable high-definition embedding mapping for ST
-=================================================================
+SpaHDmap: interpretable high-definition embedding mapping
+=========================================================
 
 .. image:: _static/Overview.png
    :alt: SpaHDmap Overview
@@ -46,3 +46,4 @@ For more details, please refer to our `manuscript <https://www.biorxiv.org/conte
 
     GitHub <https://github.com/sldyns/SpaHDmap>
     Manuscript <https://www.biorxiv.org/content/10.1101/2024.09.12.612666>
+    Xi Lab <https://www.math.pku.edu.cn/teachers/xirb/Homepage.html>
