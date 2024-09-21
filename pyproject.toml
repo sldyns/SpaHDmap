@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SpaHDmap"
+version = "0.1.0"
+description = "Interpretable high-definition dimension reduction of spatial transcriptomics data by SpaHDmap"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "MIT License"}
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: English",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Typing :: Typed",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+keywords = [
+    "spatial transcriptomics",
+    "bioinformatics",
+    "dimension reduction",
+    "deep learning",
+]
+
+authors = [
+    {name = "Kun Qian", email = "kunqian@stu.pku.edu.cn"},
+    {name = "Junjie Tang", email = "junjie.tang@pku.edu.cn"},
+]
+
+maintainers = [
+    {name = "Kun Qian", email = "kunqian@stu.pku.edu.cn"},
+]
+
+dependencies = [
+    "numpy>=1.22",
+    "cython>=0.29.24",
+    "torch>=1.12",
+    "scikit-learn>=1.0",
+    "squidpy",
+    "matplotlib",
+    "tqdm",
+    "h5py",
+    "scanpy",
+    "anndata",
+    "pandas",
+    "scikit-image",
+    "opencv-python",
+    "imagecodecs",
+    "scipy",
+]
+
+[project.optional-dependencies]
+docs = [
+    "sphinx>=8.0.1",
+    "furo>=2024.3.31",
+    "myst-parser>=2.2.0",
+    "nbsphinx>=0.8.11",
+    "sphinx-tippy>=0.4.1",
+    "sphinx-autodoc-typehints>=1.10.3",
+    "sphinx_copybutton>=0.5.0",
+    "sphinx_design>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sldyns/SpaHDmap"
+
+[tool.setuptools]
+packages = ["SpaHDmap"]
+
+[tool.setuptools.package-data]
+SpaHDmap = ["utils/color.csv"]
+
+[tool.setuptools_scm]

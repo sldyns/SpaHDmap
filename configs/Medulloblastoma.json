@@ -1,0 +1,37 @@
+{
+    "settings": {
+        "root_path": "experiments",
+        "project": "Medulloblastoma"
+    },
+    "sections": [
+        {
+            "name": "Palbocilib_A",
+            "image_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_A/HE.tif",
+            "spot_coord_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_A/spot_coord.csv",
+            "spot_exp_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_A/expression_nor.csv"
+        },
+        {
+            "name": "Palbocilib_B",
+            "image_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_B/HE.tif",
+            "spot_coord_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_B/spot_coord.csv",
+            "spot_exp_path": "data_SpaHDmap/Medulloblastoma/Palbocilib_B/expression_nor.csv"
+        },
+        {
+            "name": "Control_C",
+            "image_path": "data_SpaHDmap/Medulloblastoma/Control_C/HE.tif",
+            "spot_coord_path": "data_SpaHDmap/Medulloblastoma/Control_C/spot_coord.csv",
+            "spot_exp_path": "data_SpaHDmap/Medulloblastoma/Control_C/expression_nor.csv"
+        },
+        {
+            "name": "Control_D",
+            "image_path": "data_SpaHDmap/Medulloblastoma/Control_D/HE.tif",
+            "spot_coord_path": "data_SpaHDmap/Medulloblastoma/Control_D/spot_coord.csv",
+            "spot_exp_path": "data_SpaHDmap/Medulloblastoma/Control_D/expression_nor.csv"
+        }
+    ],
+    "paras": {
+        "scale_factor": [2, 2, 2, 2],
+        "radius": [65, 65, 65, 65],
+        "reference": {"Palbocilib_B": "Palbocilib_A", "Control_D": "Control_C"}
+    }
+}
