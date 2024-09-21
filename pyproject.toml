@@ -77,9 +77,9 @@ docs = [
 Homepage = "https://github.com/sldyns/SpaHDmap"
 
 [tool.setuptools]
-packages = ["SpaHDmap/"]
+packages = ["SpaHDmap"]
 
 [tool.setuptools.package-data]
-SpaHDmap = ["utils/color.csv"]
+SpaHDmap = ["utils/*", "data/*", "model/*"]
 
 [tool.setuptools_scm]
