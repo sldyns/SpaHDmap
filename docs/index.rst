@@ -1,5 +1,5 @@
-SpaHDmap: interpretable high-definition embedding mapping for ST data
-=====================================================================
+SpaHDmap: interpretable high-definition embedding mapping for ST
+=================================================================
 
 .. image:: _static/Overview.png
    :alt: SpaHDmap Overview
