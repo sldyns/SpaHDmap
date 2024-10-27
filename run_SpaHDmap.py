@@ -55,10 +55,10 @@ with open(args.config, 'r') as f:
 
 # 0.1 parameter setting
 radius = config['paras']['radius'] if 'radius' in config['paras'] else None
-scale_factor = config['paras']['scale_factor'] if 'scale_factor' in config['paras'] else 1
+scale_rate = config['paras']['scale_rate'] if 'scale_rate' in config['paras'] else 1
 if radius.__class__ == list: assert len(radius) == len(config['sections']), "The length of radius should match the number of sections."
-if scale_factor.__class__ == list: assert len(scale_factor) == len(config['sections']), "The length of scale_factor should match the number of sections."
-if len(config['sections']) > 1 and (radius.__class__ == int or scale_factor.__class__ == int): print("Warning: The radius or scale_factor is not specified for each section, use the same value for all sections.")
+if scale_rate.__class__ == list: assert len(scale_rate) == len(config['sections']), "The length of scale_rate should match the number of sections."
+if len(config['sections']) > 1 and (radius.__class__ == int or scale_rate.__class__ == int): print("Warning: The radius or scale_rate is not specified for each section, use the same value for all sections.")
 
 reference = config['paras']['reference'] if 'reference' in config['paras'] else None
 all_section_names = [section['name'] for section in config['sections']]
@@ -80,14 +80,14 @@ sections = []
 for idx, section in enumerate(section_list):
     section_name = section['name']
     tmp_radius = radius[idx] if radius.__class__ == list else radius
-    tmp_scale_factor = scale_factor[idx] if scale_factor.__class__ == list else scale_factor
+    tmp_scale_rate = scale_rate[idx] if scale_rate.__class__ == list else scale_rate
 
     image_path = section['image_path'] if 'image_path' in section else None
     adata_path = section['adata_path'] if 'adata_path' in section else None
     if adata_path is not None:
         adata = sc.read(adata_path)
         sections.append(hdmap.prepare_stdata(adata=adata, section_name=section_name, image_path=image_path,
-                                             scale_factor=tmp_scale_factor, radius=tmp_radius,
+                                             scale_rate=tmp_scale_rate, radius=tmp_radius,
                                              swap_coord=args.swap_coord, create_mask=args.create_mask))
         continue
 
@@ -98,7 +98,7 @@ for idx, section in enumerate(section_list):
 
     sections.append(hdmap.prepare_stdata(section_name=section_name, image_path=image_path, visium_path=visium_path,
                                          spot_coord_path=spot_coord_path, spot_exp_path=spot_exp_path,
-                                         scale_factor=tmp_scale_factor, radius=tmp_radius, swap_coord=args.swap_coord))
+                                         scale_rate=tmp_scale_rate, radius=tmp_radius, swap_coord=args.swap_coord))
 
 if args.select_svgs: hdmap.select_svgs(sections, n_top_genes=args.n_top_genes)
 ## -------------------------------------------------------------------------------------------------

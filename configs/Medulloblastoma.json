@@ -30,7 +30,7 @@
         }
     ],
     "paras": {
-        "scale_factor": [2, 2, 2, 2],
+        "scale_rate": [2, 2, 2, 2],
         "radius": [65, 65, 65, 65],
         "reference": {"Palbocilib_B": "Palbocilib_A", "Control_D": "Control_C"}
     }

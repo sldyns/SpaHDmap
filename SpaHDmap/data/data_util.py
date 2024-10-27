@@ -10,6 +10,7 @@ import scipy
 import math
 import cv2
 import warnings
+from .sparkx import sparkx
 
 class STData:
     """
@@ -24,8 +25,8 @@ class STData:
         AnnData object containing the spatial transcriptomics data.
     section_name : str
         Name of the tissue section.
-    scale_factor : float
-        Scale factor for adjusting coordinates and image size.
+    scale_rate : float
+        Scale rate for adjusting coordinates and image size.
     radius : float
         Radius of spots in original scale.
     swap_coord : bool
@@ -37,7 +38,7 @@ class STData:
     def __init__(self,
                  adata: anndata.AnnData,
                  section_name: str,
-                 scale_factor: float,
+                 scale_rate: float,
                  radius: float,
                  swap_coord: bool = True,
                  create_mask: bool = True):
@@ -53,8 +54,8 @@ class STData:
 
         # Initialize the STData object
         self.section_name = section_name
-        self.scale_factor = scale_factor
-        self.radius = int(radius / scale_factor)
+        self.scale_rate = scale_rate
+        self.radius = int(radius / scale_rate)
         self.kernel_size = self.radius // 2 * 2 + 1
 
         # Initialize the scores and save_paths dictionaries
@@ -81,7 +82,7 @@ class STData:
                 f"Number of spots: {self.num_spots}\n"
                 f"Number of genes: {len(self.genes)}\n"
                 f"Image shape: {self.image.shape}\n"
-                f"Scale factor: {self.scale_factor}\n"
+                f"Scale rate: {self.scale_rate}\n"
                 f"Spot radius: {self.radius}\n"
                 f"Image type: {self.image_type}\n"
                 f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
@@ -94,7 +95,7 @@ class STData:
                 f"Number of spots: {self.num_spots}\n"
                 f"Number of genes: {len(self.genes)}\n"
                 f"Image shape: {self.image.shape}\n"
-                f"Scale factor: {self.scale_factor}\n"
+                f"Scale rate: {self.scale_rate}\n"
                 f"Spot radius: {self.radius}\n"
                 f"Image type: {self.image_type}\n"
                 f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
@@ -117,7 +118,7 @@ class STData:
         """
 
         # Process the spot coordinates
-        self.spot_coord = spot_coord / self.scale_factor - 1
+        self.spot_coord = spot_coord / self.scale_rate - 1
         self.num_spots = self.spot_coord.shape[0]
         min_coords, max_coords = self.spot_coord.min(0).astype(int), self.spot_coord.max(0).astype(int)
         tmp_row_range = (max(0, min_coords[0] - self.radius), min(image.shape[0], max_coords[0] + self.radius + 1))
@@ -126,7 +127,7 @@ class STData:
         # Process the image
         image = image / np.max(image, axis=(0, 1), keepdims=True)
 
-        hires_shape = (math.ceil(image.shape[0] / self.scale_factor), math.ceil(image.shape[1] / self.scale_factor))
+        hires_shape = (math.ceil(image.shape[0] / self.scale_rate), math.ceil(image.shape[1] / self.scale_rate))
         lowres_shape = (math.ceil(image.shape[0] / 16), math.ceil(image.shape[1] / 16))
 
         hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
@@ -216,7 +217,7 @@ def _classify_image_type(image):
 
     # Check for characteristics of protein fluorescence images
     if low_intensity_ratio > 0.5 and high_intensity_ratio < 0.05:
-        return 'Protein'
+        return 'immunofluorescence'
     return 'HE'
 
 def read_10x_data(data_path: str) -> anndata.AnnData:
@@ -314,7 +315,7 @@ def preprocess_adata(adata: anndata.AnnData,
 def prepare_stdata(section_name: str,
                    image_path: str,
                    adata: Optional[sc.AnnData] = None,
-                   scale_factor: float = 1,
+                   scale_rate: float = 1,
                    radius: float = None,
                    swap_coord: bool = True,
                    create_mask: bool = True,
@@ -330,8 +331,8 @@ def prepare_stdata(section_name: str,
         Path to the H&E image file. This is a required parameter.
     adata : Optional[sc.AnnData]
         AnnData object containing the spatial transcriptomics data.
-    scale_factor : float
-        Scale factor for adjusting coordinates and image size. Defaults to 1.
+    scale_rate : float
+        Scale rate for adjusting coordinates and image size. Defaults to 1.
     radius : float
         Radius of spots in original scale. Defaults to None.
     swap_coord : bool
@@ -400,16 +401,18 @@ def prepare_stdata(section_name: str,
     # Create STData object
     st_data = STData(adata,
                      section_name=section_name,
-                     scale_factor=scale_factor,
+                     scale_rate=scale_rate,
                      radius=radius,
                      swap_coord=swap_coord,
                      create_mask=create_mask)
     return st_data
 
+
 def select_svgs(section: STData | list[STData],
-                n_top_genes: int = 3000):
+                n_top_genes: int = 3000,
+                method: str = 'moran'):
     """
-    Select the top SVGs based on Moran's I across multiple tissue sections.
+    Select the top SVGs based on Moran's I or SPARK-X across multiple tissue sections.
     Update each section's AnnData object to only include the selected SVGs.
 
     Parameters
@@ -417,7 +420,9 @@ def select_svgs(section: STData | list[STData],
     section : STData | list[STData]
         STData object or list of STData objects.
     n_top_genes : int
-        Number of top SVGs to select.
+        Number of top SVGs to select, defaults to 3000.
+    method : str
+        Method to use for selecting SVGs. Either 'moran' or 'sparkx', defaults to 'moran'.
 
     """
     sections = section if isinstance(section, list) else [section]
@@ -439,19 +444,37 @@ def select_svgs(section: STData | list[STData],
             "Number of genes is less than the specified number of top genes, using all genes.")
         selected_genes = overlap_genes
     else:
-        # Compute Moran's I for overlapping genes across all sections
-        moran_i_values = []
-        for section in sections:
-            sq.gr.spatial_autocorr(section.adata, mode="moran", genes=overlap_genes)
-            moran_i_values.append(section.adata.uns['moranI']['I'])
+        if method == 'moran':
+            # Compute Moran's I for overlapping genes across all sections
+            moran_i_values = []
+            for section in sections:
+                sq.gr.spatial_autocorr(section.adata, mode="moran", genes=overlap_genes)
+                moran_i_values.append(section.adata.uns['moranI']['I'])
 
-        # Combine Moran's Index results and select top n_top_genes
-        combined_moran_i = pd.concat(moran_i_values, axis=1, keys=[s.section_name for s in sections])
-        combined_moran_i['mean_rank'] = combined_moran_i.mean(axis=1).rank(method='dense', ascending=False)
-        selected_genes = combined_moran_i.sort_values('mean_rank').head(n_top_genes).index.tolist()
+            # Combine Moran's Index results and select top n_top_genes
+            combined_moran_i = pd.concat(moran_i_values, axis=1, keys=[s.section_name for s in sections])
+            combined_moran_i['mean_rank'] = combined_moran_i.mean(axis=1).rank(method='dense', ascending=False)
+            selected_genes = combined_moran_i.sort_values('mean_rank').head(n_top_genes).index.tolist()
+
+        elif method == 'sparkx':
+            # Compute SPARK-X p-values for overlapping genes across all sections
+            sparkx_pvals = []
+            for section in sections:
+                counts = section.adata[:, overlap_genes].X
+                location = section.adata.obsm['spatial']
+                pvals = sparkx(counts, location)
+                sparkx_pvals.append(pd.Series(pvals, index=overlap_genes))
+
+            # Combine SPARK-X p-values and select top n_top_genes
+            combined_sparkx = pd.concat(sparkx_pvals, axis=1, keys=[s.section_name for s in sections])
+            combined_sparkx['mean_rank'] = combined_sparkx.mean(axis=1).rank(method='dense', ascending=True)
+            selected_genes = combined_sparkx.sort_values('mean_rank').head(n_top_genes).index.tolist()
+
+        else:
+            raise ValueError("Invalid method. Choose either 'moran' or 'sparkx'.")
 
     # Update each section's AnnData object with the selected SVGs
     for section in sections:
         section.adata = section.adata[:, selected_genes]
 
-    print(f"Selected {len(selected_genes)} SVGs.")
+    print(f"Selected {len(selected_genes)} SVGs using {method} method.")

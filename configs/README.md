@@ -25,7 +25,7 @@ The structure of each JSON file is as follows:
         }
     ],
     "paras": {
-        "scale_factor": [2, 2], // The scale factor of the input images, integer for single section, list for multi-sections, e.g., [2, 2]
+        "scale_rate": [2, 2], // The scale rate of the input images, integer for single section, list for multi-sections, e.g., [2, 2]
         "radius": [65, 65], // The radius of the spots, integer for single section, list for multi-sections, e.g., [65, 65]
         "reference": {"name of section B": "name of section A"} // Optional reference section for batch effect removal
     }
@@ -34,7 +34,7 @@ The structure of each JSON file is as follows:
 
 - The `settings` specifies the root path of the experiment and the name of the project. 
 - The `sections` outlines the paths to the input data. Note that multiple sections can be listed under sections, indicating that these sections will be used collectively for model training.
-- The `paras` section details the parameters for SpaHDmap, including scale_factor and radius. If the input data contains multiple sections, the scale_factor and radius should be lists, with each element corresponding to a section.
+- The `paras` section details the parameters for SpaHDmap, including scale_rate and radius. If the input data contains multiple sections, the scale_rate and radius should be lists, with each element corresponding to a section.
 
 # How to Use
 

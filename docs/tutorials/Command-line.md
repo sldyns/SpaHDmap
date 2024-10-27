@@ -20,7 +20,7 @@ Before using SpaHDmap with command line, you need to prepare a JSON file that co
         }
     ],
     "paras": {
-        "scale_factor": 1, // The scale factor of the input images
+        "scale_rate": 1, // The scale rate of the input images
         "radius": 45 // The radius of the spots
     }
 }
@@ -51,7 +51,7 @@ or,
         }
     ],
     "paras": {
-        "scale_factor": [2, 2], // The scale factor of the input images
+        "scale_rate": [2, 2], // The scale rate of the input images
         "radius": [65, 65], // The radius of the spots
         "reference": {"name of section B": "name of section A"} // Optional query-reference pairs for batch effect removal
     }

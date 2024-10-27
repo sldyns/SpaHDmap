@@ -431,7 +431,7 @@ def __initial_weights__(module):
     # Initialize the weights of the model
 
     if isinstance(module, nn.Conv2d):
-        init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+        init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='leaky_relu')
         if module.bias is not None:
             init.constant_(module.bias, 0)
     elif isinstance(module, nn.BatchNorm2d):

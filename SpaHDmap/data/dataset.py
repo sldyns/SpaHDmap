@@ -23,14 +23,14 @@ class HE_Prediction_Dataset(Dataset):
         self.image = section.image
         self.split_size = args.split_size
         self.redundant_ratio = args.redundant_ratio
-        self.scale_factor = section.scale_factor
+        self.scale_rate = section.scale_rate
         self.tissue_coord = section.tissue_coord
 
         """
             self.image (numpy.ndarray): HE image.
             self.split_size (int): Size of each split for the tissue.
             self.redundant_ratio (float): Redundancy ratio for the split.
-            self.scale_factor (float): Scale factor for resizing the image.
+            self.scale_rate (float): Scale rate for resizing the image.
             self.tissue_coord (numpy.ndarray): Tissue coordinates.
         """
 
@@ -82,7 +82,7 @@ class HE_Dataset(Dataset):
 
         self.spot_coord = section.spot_coord
         self.spot_exp = section.spot_exp
-        self.scale_factor = section.scale_factor
+        self.scale_rate = section.scale_rate
 
         self.VD_score = section.scores['VD']
         self.tissue_coord = section.tissue_coord
@@ -95,7 +95,7 @@ class HE_Dataset(Dataset):
             self.image (numpy.ndarray): HE image.
             self.spot_coord (numpy.ndarray): Spot coordinates.
             self.spot_exp (numpy.ndarray): Spot expression.
-            self.scale_factor (float): Scale factor for resizing the image.
+            self.scale_rate (float): Scale rate for resizing the image.
             self.VD_score (numpy.ndarray): VD score.
             self.tissue_coord (numpy.ndarray): Tissue coordinates.
             self.split_size (int): Size of each split for the tissue.

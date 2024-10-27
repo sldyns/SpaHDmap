@@ -107,10 +107,9 @@ class Mapper:
 
         # Get the tissue splits and create pseudo spots
         if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
-        self._tissue_separation()
-        self._crate_pseudo_spots()
+        self._process_data()
 
-    def _tissue_separation(self):
+    def _process_data(self):
         # Divide the tissue area into sub-tissue regions based on split size and redundancy ratio.
 
         for name, section in self.section.items():
@@ -139,19 +138,13 @@ class Mapper:
 
             section.tissue_coord = np.array(tissue_coord)
 
-            if self.verbose: print(f'For section {name}, divide the tissue into {len(tissue_coord)} sub-tissues, ', end='')
-
-    def _crate_pseudo_spots(self):
-        # Create pseudo spots for the tissue sections.
-
-        for _, section in self.section.items():
-            # Get the section details
+            # Create pseudo spots for the tissue sections.
+            real_spot_coord = section.spot_coord
             feasible_domain = section.feasible_domain
             radius = section.radius
-            real_spot_coord = section.spot_coord
             num_pseudo_spots = min(round(real_spot_coord.shape[0] / 1000) * 5000, 100000)
 
-            if self.verbose: print(f'and create {num_pseudo_spots} pseudo spots')
+            if self.verbose: print(f'For section {name}, divide the tissue into {len(tissue_coord)} sub-tissues, and create {num_pseudo_spots} pseudo spots.')
 
             # Get the image embeddings
             pseudo_spot_coord = create_pseudo_spots(feasible_domain=feasible_domain, radius=radius,

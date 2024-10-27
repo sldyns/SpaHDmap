@@ -30,7 +30,7 @@ def visualize_score(section: STData | list[STData],
     index: int, optional
         The index of the embedding to be visualized. Defaults to None.
     scale: float, optional
-        The scale factor for visualization. Defaults to 4.
+        The scale rate for visualization. Defaults to 4.
     verbose: bool, optional
         Whether to enable verbose output. Defaults to False.
     """
