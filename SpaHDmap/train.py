@@ -21,7 +21,7 @@ from sklearn.mixture import GaussianMixture
 
 from .data import HE_Prediction_Dataset, HE_Dataset, HE_Score_Dataset, STData
 from .model import SpaHDmapUnet, GraphAutoEncoder
-from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, visualize_score
+from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, cluster_score, visualize_score, visualize_cluster
 
 
 class Mapper:
@@ -959,22 +959,71 @@ class Mapper:
         torch.cuda.empty_cache()
         return embeddings
 
+    def cluster(self,
+                section: str | STData | list[str | STData] = None,
+                use_score: str = 'SpaHDmap',
+                resolution: float = 0.8,
+                n_neighbors: int = 50,
+                show: bool = True):
+        """
+        Perform clustering on sections.
+
+        Parameters
+        ----------
+        section : str | STData | list
+            Section(s) to cluster. If None, uses all sections
+        use_score : str
+            Score type to use for clustering
+        resolution : float
+            Resolution parameter for Louvain clustering
+        n_neighbors : int
+            Number of neighbors for graph construction
+        show : bool
+            Whether to display the plot using plt.show(). Defaults to True.
+        """
+        if section is None:
+            section = list(self.section.values())
+        elif isinstance(section, str):
+            section = [self.section[section]]
+        elif isinstance(section, STData):
+            section = [section]
+        elif isinstance(section, list):
+            section = [self.section[s] if isinstance(s, str) else s for s in section]
+
+        cluster_score(
+            section=section,
+            use_score=use_score,
+            resolution=resolution,
+            n_neighbors=n_neighbors,
+            verbose=self.verbose
+        )
+
+        if show:
+            self.visualize(section=section, score=use_score, target='cluster', show=show)
+
     def visualize(self,
                   section: str | STData | list[str | STData] = None,
                   score: str = 'SpaHDmap',
-                  index: int = None):
+                  target: str = 'score',
+                  index: int = None,
+                  show: bool = True):
         """
-        Visualize the scores for the given section.
+        Visualize scores or clustering results for given sections.
 
         Parameters
         ----------
         section : str or list
-            The section to visualize. Can be a string, list, or None. If None, it will use self.section.
-        score : str, required
-            The type of score to visualize (e.g., 'NMF', 'GCN', 'SpaHDmap').
+            The section to visualize. If None, uses all sections
+        score : str
+            The type of score to visualize (e.g., 'NMF', 'GCN', 'SpaHDmap')
+        target : str
+            What to visualize - either 'score' or 'cluster'
         index : int
-            The index of the embedding to be visualized. Defaults to None.
+            For score visualization only - the index of embedding to show. Defaults to None
+        show : bool
+            Whether to display the plot using plt.show(). Defaults to True.
         """
+        # Process section input
         if section is None:
             section = list(self.section.values())
         elif isinstance(section, str):
@@ -996,15 +1045,24 @@ class Mapper:
         if score not in ['NMF', 'GCN', 'VD', 'SpaHDmap']:
             raise ValueError("Score must be 'NMF', 'GCN', 'VD', or 'SpaHDmap'.")
 
-        if index: assert 0 <= index < self.rank, f"Index must be less than the rank ({self.rank}) and greater than or equal to 0."
-        assert section[0].scores[score] is not None, f"Score {score} is not available, please run the get_{score}_score() method first."
+        # Call appropriate visualization function
+        if target == 'score':
+            if index is not None:
+                assert 0 <= index < self.rank, f"Index must be less than rank ({self.rank})"
+            assert section[0].scores[score] is not None, f"Score {score} not available"
+            visualize_score(section=section, use_score=score, index=index, verbose=self.verbose)
 
-        visualize_score(section=section, use_score=score, index=index, verbose=self.verbose)
+        elif target == 'cluster':
+            assert section[0].clusters[score] is not None, f"Clustering for {score} not available"
+            visualize_cluster(section=section, use_score=score, show=show, verbose=self.verbose)
+
+        else:
+            raise ValueError("Target must be 'score' or 'cluster'")
 
     def run_SpaHDmap(self,
-                        save_score: bool = False,
-                        save_model: bool = True,
-                        visualize: bool = True):
+                     save_score: bool = False,
+                     save_model: bool = True,
+                     visualize: bool = True):
 
         # Get the NMF score
         print('Step 1: Run NMF')

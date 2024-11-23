@@ -5,12 +5,21 @@ import cv2
 import matplotlib.pyplot as plt
 from pkg_resources import resource_filename
 from ..data import STData
+import matplotlib.colors as clr
+import matplotlib.cm as cm
 
-# Load color map
+# Load color map for visualization
 data_file_path = resource_filename(__name__, 'color.csv')
-color_map = pd.read_csv(data_file_path, header=0)
-color_map = np.array(
-    [(int(color[5:7], 16), int(color[3:5], 16), int(color[1:3], 16)) for color in color_map['blue2red'].values],
+color_maps = pd.read_csv(data_file_path, header=0)
+color_maps_emb = np.array(
+    [(int(color[5:7], 16), int(color[3:5], 16), int(color[1:3], 16)) for color in color_maps['blue2red'].values],
+    dtype=np.uint8)
+
+color_maps = [cm.get_cmap(name, size) for name, size in [('tab20', 20), ('Set3', 12), ('Dark2', 8)]]
+color_16form = [clr.rgb2hex(cmap(i)) for cmap in color_maps for i in range(cmap.N)]
+
+color_maps_cluster = np.array(
+    [(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)) for color in color_16form],
     dtype=np.uint8)
 
 def visualize_score(section: STData | list[STData],
@@ -77,7 +86,7 @@ def visualize_score(section: STData | list[STData],
             resized_score = cv2.resize(filtered_score.astype(np.uint8),
                                         (int(filtered_score.shape[1] / scale), int(filtered_score.shape[0] / scale)))
 
-            color_img = color_map[resized_score]
+            color_img = color_maps_emb[resized_score]
 
             # Set the color of the background to gray
             color_img[background] = [128, 128, 128]
@@ -97,3 +106,94 @@ def visualize_score(section: STData | list[STData],
 
             # Save the colorized score image
             cv2.imwrite(os.path.join(save_path, 'color', f'Embedding_{idx}.png'), color_img)
+
+def visualize_cluster(section: STData | list[STData],
+                      use_score: str = 'SpaHDmap',
+                      scale: float = 4.,
+                      show: bool = False,
+                      verbose: bool = False):
+    """
+    Visualize clustering results.
+
+    Parameters
+    ----------
+    section : STData | list[STData]
+        The section or list of sections to visualize
+    use_score : str
+        Score type to visualize clustering for
+    scale : float
+        Scale factor for SpaHDmap visualization. Defaults to 4.
+    show : bool
+        Whether to display the plot using plt.show(). Defaults to False.
+    verbose : bool
+        Whether to print verbose output
+    """
+    if verbose: print(f"*** Visualizing clustering results for {use_score}... ***")
+
+    sections = [section] if isinstance(section, STData) else section
+
+    for section in sections:
+        # Get clustering info
+        if not hasattr(section, 'clusters') or use_score not in section.clusters:
+            raise ValueError(f"No clustering results found for {use_score}")
+
+        clusters = section.clusters[use_score]
+        mask = section.mask
+        save_path = section.save_paths[use_score]
+
+        # Create visualization
+        if use_score == 'SpaHDmap':
+            # For SpaHDmap use pixel-level labels at scaled resolution
+            pixel_labels = clusters['pixel']
+            n_clusters = len(np.unique(pixel_labels[pixel_labels >= 0]))
+
+            # Create and scale mask
+            mask_scaled = cv2.resize(mask.astype(np.uint8),
+                                     (int(mask.shape[1]/scale),
+                                     int(mask.shape[0]/scale)),
+                                     cv2.INTER_NEAREST).astype(bool)
+
+            # Create visualization image
+            vis_img = np.ones(mask_scaled.shape + (3,), dtype=np.uint8) * 255
+
+            # Draw clusters
+            for i in range(n_clusters):
+                pixels = np.where(pixel_labels == i)
+                vis_img[pixels] = color_maps_cluster[i % len(color_maps_cluster)]
+
+            # Set background
+            background = np.where(~mask_scaled)
+
+        else:
+            # For spot-level clustering
+            spot_labels = clusters
+            n_clusters = len(np.unique(spot_labels))
+
+            # Create visualization image
+            vis_img = np.ones(mask.shape + (3,), dtype=np.uint8) * 255
+
+            # Draw spots
+            spot_coords = section.spot_coord
+            radius = section.radius
+            for i in range(n_clusters):
+                spots = spot_coords[spot_labels == i]
+                for coord in spots:
+                    cv2.circle(vis_img,
+                             (int(coord[1]), int(coord[0])),
+                             int(radius),
+                             color_maps_cluster[i % len(color_maps_cluster)].tolist(),
+                             -1)
+
+            # Set background
+            background = np.where(~mask)
+
+        # Set background color and save
+        vis_img[background] = [128, 128, 128]
+
+        os.makedirs(save_path, exist_ok=True)
+        cv2.imwrite(os.path.join(save_path, 'clustering.png'), vis_img)
+
+        if show:
+            plt.imshow(cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB))
+            plt.axis('off')
+            plt.show()

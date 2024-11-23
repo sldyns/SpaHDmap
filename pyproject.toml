@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SpaHDmap"
-version = "0.0.2"
+version = "0.0.3"
 description = "Interpretable high-definition dimension reduction of spatial transcriptomics data by SpaHDmap"
 readme = "README.md"
 requires-python = ">=3.7"
@@ -48,6 +48,7 @@ dependencies = [
     "cython>=0.29.24",
     "torch>=1.12",
     "scikit-learn>=1.0",
+    "scikit-network",
     "squidpy",
     "matplotlib",
     "tqdm",

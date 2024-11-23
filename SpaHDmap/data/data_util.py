@@ -10,6 +10,7 @@ import scipy
 import math
 import cv2
 import warnings
+import pickle
 from .sparkx import sparkx
 
 class STData:
@@ -61,6 +62,7 @@ class STData:
         # Initialize the scores and save_paths dictionaries
         self.save_paths = None
         self.scores = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None}
+        self.clusters = {'NMF': None, 'GCN': None, 'SpaHDmap': None}
         self.tissue_coord = None
 
         # Preprocess the image and spot expression data
@@ -73,6 +75,52 @@ class STData:
     @property
     def genes(self):
         return self.adata.var_names.tolist()
+
+    @staticmethod
+    def load(path: str) -> 'STData':
+        """
+        Load STData object from file.
+
+        Parameters
+        ----------
+        path : str
+            Path to load the STData object from. Should end with '.st'
+
+        Returns
+        -------
+        STData
+            Loaded STData object
+        """
+        if not path.endswith('.st'):
+            path = path + '.st'
+
+        with open(path, 'rb') as f:
+            st_data = pickle.load(f)
+
+        # Restore memory efficient sparse matrix format
+        if scipy.sparse.issparse(st_data.adata.X):
+            st_data.adata.X = st_data.adata.X.tocsc()
+
+        return st_data
+
+    def save(self, path: str):
+        """
+        Save STData object to file.
+
+        Parameters
+        ----------
+        path : str
+            Path to save the STData object. Should end with '.st'
+        """
+        if not path.endswith('.st'):
+            path = path + '.st'
+
+        # Convert sparse matrix to csr format for better pickling
+        if scipy.sparse.issparse(self.adata.X):
+            self.adata.X = self.adata.X.tocsr()
+
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
 
     def __repr__(self):
         """
@@ -193,6 +241,24 @@ class STData:
             col_range = np.arange(max(col - self.radius, 0), min(col + self.radius + 1, hires_shape[1]))
             self.feasible_domain[np.ix_(row_range, col_range)] = 0
 
+    def __getstate__(self):
+        """Custom pickling to handle unpicklable objects."""
+        state = self.__dict__.copy()
+
+        # Remove unpicklable objects
+        if hasattr(self, 'save_paths'):
+            state['save_paths'] = None
+
+        return state
+
+    def __setstate__(self, state):
+        """Custom unpickling to restore object state."""
+        self.__dict__.update(state)
+
+        # Initialize empty save paths if needed
+        if not self.save_paths:
+            self.save_paths = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None}
+
 def _classify_image_type(image):
     """
     Classify an image as either H&E stained or high dynamic range protein fluorescence.
@@ -312,8 +378,9 @@ def preprocess_adata(adata: anndata.AnnData,
 
     return adata
 
-def prepare_stdata(section_name: str,
-                   image_path: str,
+def prepare_stdata(section_name: str = None,
+                   st_path: Optional[str] = None,
+                   image_path: Optional[str] = None,
                    adata: Optional[sc.AnnData] = None,
                    scale_rate: float = 1,
                    radius: float = None,
@@ -327,8 +394,10 @@ def prepare_stdata(section_name: str,
     ----------
     section_name : str
         Name of the tissue section.
-    image_path : str
-        Path to the H&E image file. This is a required parameter.
+    st_path : Optional[str]
+        Path to saved .st file to load STData object. If provided, tries to load from this first.
+    image_path : Optional[str]
+        Path to the H&E image file. Required if st_path is None or loading fails.
     adata : Optional[sc.AnnData]
         AnnData object containing the spatial transcriptomics data.
     scale_rate : float
@@ -352,6 +421,25 @@ def prepare_stdata(section_name: str,
     STData
         Prepared STData object.
     """
+    # Try loading from st_path first if provided
+    if st_path is not None:
+        print(f"*** Loading saved STData from {st_path} ***")
+        try:
+            st_data = STData.load(st_path)
+            if section_name and section_name != st_data.section_name:
+                st_data.section_name = section_name
+                print(f"Updated section name to {section_name}")
+            return st_data
+        except Exception as e:
+            print(f"Failed to load .st file: {e}")
+            print("Falling back to other data sources...")
+
+    # Check if image_path is provided when needed
+    if image_path is None:
+        raise ValueError("image_path is required when st_path is not provided or loading fails")
+
+    if section_name is None:
+        raise ValueError("section_name is required when creating new STData object")
 
     # Check for AnnData
     if adata is not None:
