@@ -32,4 +32,6 @@ in the root of this repository.
 
 ## Documentation
 
-Please refer to the [documentation](https://spahdmap.readthedocs.io/en/latest/) for more details.
+Please refer to the [documentation](https://spahdmap.readthedocs.io/en/latest/) for more details, for examples:
+- to get the detailed information about installation, please refer to the [installation guide](https://spahdmap.readthedocs.io/en/latest/installation.html).
+- to get started with SpaHDmap, please refer to the [tutorials](https://spahdmap.readthedocs.io/en/latest/tutorials/index.html).
