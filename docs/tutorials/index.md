@@ -61,3 +61,12 @@ This advanced tutorial covers:
 - Visualizing and comparing results from different sections
 
 Each tutorial provides step-by-step instructions and code examples to help you get started with SpaHDmap for your specific use case.
+
+We tested the tutorials on the following system:
+- Ubuntu 22.04 LTS
+- Python 3.11.9
+- CPU: Intel(R) Xeon(R) Gold 6330 CPU @ 2.00GHz
+- GPU: NVIDIA A40 (48GB)
+- RAM: 512GB
+
+It takes about 1~2 hours to complete each tutorial. If you encounter any issues, please open an issue on the `SpaHDmap GitHub repository <https://github.com/sldyns/SpaHDmap/issues>`_.

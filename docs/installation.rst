@@ -1,7 +1,10 @@
 Installation
 ============
 
-SpaHDmap can be installed using pip or directly from the source code. Here are the different methods to install SpaHDmap:
+SpaHDmap can be installed using pip or directly from the source code and supports for both Linux and Windows operating systems.
+We have tested the installation of Version 0.0.3 on Linux and Windows with a virtual environment using Python 3.9.27.
+It takes around 5 minutes to install SpaHDmap on a standard laptop (most of the time is spent on downloading the dependencies).
+Here are the different methods to install SpaHDmap:
 
 Using pip
 ---------
@@ -40,18 +43,18 @@ SpaHDmap requires Python 3.9 or later. The main dependencies are:
 - cython>=0.29.24
 - torch>=1.12
 - scikit-learn>=1.0.1
-- squidpy
-- matplotlib
-- tqdm
-- h5py
-- scanpy
-- anndata
-- pandas
-- scikit-image
-- opencv-python
-- imagecodecs
-- scipy
-- seaborn
+- squidpy>=1.6.0
+- matplotlib>=3.4.3
+- tqdm>=4.62.3
+- h5py>=3.10.0
+- scanpy>=1.9.7
+- anndata>=0.10.0
+- pandas>=2.2.0
+- scikit-image>=0.23.0
+- opencv-python>=4.10.0
+- imagecodecs>=2023.1.23
+- scipy>=1.13.1
+- seaborn>=0.13.1
 
 These dependencies will be automatically installed when you install SpaHDmap using pip.
 
