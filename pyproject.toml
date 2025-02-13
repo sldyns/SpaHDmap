@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SpaHDmap"
-version = "0.0.3"
+version = "0.0.5"
 description = "Interpretable high-definition dimension reduction of spatial transcriptomics data by SpaHDmap"
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 license = {text = "MIT License"}
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -19,11 +19,11 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Typing :: Typed",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.7",
-    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
@@ -48,6 +48,7 @@ dependencies = [
     "cython>=0.29.24",
     "torch>=1.12",
     "scikit-learn>=1.0",
+    "dask==2024.8.0",
     "scikit-network",
     "squidpy",
     "matplotlib",
