@@ -7,6 +7,7 @@ from pkg_resources import resource_filename
 from ..data import STData
 import matplotlib.colors as clr
 import matplotlib.cm as cm
+from typing import Union, List
 
 # Load color map for visualization
 data_file_path = resource_filename(__name__, 'color.csv')
@@ -22,7 +23,7 @@ color_maps_cluster = np.array(
     [(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)) for color in color_16form],
     dtype=np.uint8)
 
-def visualize_score(section: STData | list[STData],
+def visualize_score(section: Union[STData, List[STData]],
                     use_score: str,
                     index: int = None,
                     scale: float = 4.,
@@ -107,7 +108,7 @@ def visualize_score(section: STData | list[STData],
             # Save the colorized score image
             cv2.imwrite(os.path.join(save_path, 'color', f'Embedding_{idx}.png'), color_img)
 
-def visualize_cluster(section: STData | list[STData],
+def visualize_cluster(section: Union[STData, List[STData]],
                       use_score: str = 'SpaHDmap',
                       scale: float = 4.,
                       show: bool = False,

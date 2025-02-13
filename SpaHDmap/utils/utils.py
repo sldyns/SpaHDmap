@@ -1,3 +1,4 @@
+from typing import Union
 import numpy as np
 import math
 from scipy.spatial.distance import cdist
@@ -59,17 +60,17 @@ def query_kdtree_parallel(tree,
     return nearest_indices
 
 def find_nearby_spots(spot_coord: np.ndarray,
-                      row_range: tuple | int,
-                      col_range: tuple | int) -> np.ndarray:
+                      row_range: Union[tuple, int],
+                      col_range: Union[tuple, int]) -> np.ndarray:
         """
         Find the nearby spots based on the spot coordinates and the feasible domain.
 
         Parameters:
             spot_coord (numpy.ndarray): 
                 Array containing spot coordinates.
-            row_range (tuple | int): 
+            row_range (Union[tuple, int]): 
                 Tuple indicating the start and end row for the feasible domain.
-            col_range (tuple | int): 
+            col_range (Union[tuple, int]): 
                 Tuple indicating the start and end column for the feasible domain.
 
         Returns:

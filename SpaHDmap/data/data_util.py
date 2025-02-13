@@ -3,7 +3,7 @@ import pandas as pd
 import scanpy as sc
 import squidpy as sq
 from skimage import io
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union, List
 from skimage import filters
 import anndata
 import scipy
@@ -51,7 +51,7 @@ class STData:
         image = adata.uns['spatial'][list(adata.uns['spatial'].keys())[0]]['images']['orires'].copy()
         spot_coord = adata.obsm['spatial']
 
-        del adata.uns['spatial'][list(adata.uns['spatial'].keys())[0]]['images']['orires']
+        del self.adata.uns['spatial'][list(adata.uns['spatial'].keys())[0]]['images']['orires']
 
         # Initialize the STData object
         self.section_name = section_name
@@ -178,7 +178,7 @@ class STData:
         hires_shape = (math.ceil(image.shape[0] / self.scale_rate), math.ceil(image.shape[1] / self.scale_rate))
         lowres_shape = (math.ceil(image.shape[0] / 16), math.ceil(image.shape[1] / 16))
 
-        hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
+        hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32) if self.scale_rate != 1 else image
         lowres_image = cv2.resize(image, (lowres_shape[1], lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
 
         self.image_type = _classify_image_type(lowres_image)
@@ -215,7 +215,7 @@ class STData:
             mask = np.logical_and(mask, tmp_mask)
 
             ## Close and open the mask
-            if self.image_type == 'Protein':
+            if self.image_type == 'Immunofluorescence':
                 mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((self.radius*4, self.radius*4), np.uint8)).astype(np.bool_)
             else:
                 mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((self.radius//4, self.radius//4), np.uint8)).astype(np.bool_)
@@ -261,7 +261,7 @@ class STData:
 
 def _classify_image_type(image):
     """
-    Classify an image as either H&E stained or high dynamic range protein fluorescence.
+    Classify an image as either H&E stained or high dynamic range Immunofluorescence.
 
     Parameters
     ----------
@@ -271,7 +271,7 @@ def _classify_image_type(image):
     Returns
     -------
     str
-        'HE' for H&E stained images, 'Protein' for protein fluorescence images.
+        'HE' for H&E stained images, 'Immunofluorescence' for Immunofluorescence images.
     """
 
     # Calculate histogram
@@ -281,9 +281,9 @@ def _classify_image_type(image):
     low_intensity_ratio = np.sum(hist[:100]) / np.sum(hist)
     high_intensity_ratio = np.sum(hist[-100:]) / np.sum(hist)
 
-    # Check for characteristics of protein fluorescence images
+    # Check for characteristics of Immunofluorescence images
     if low_intensity_ratio > 0.5 and high_intensity_ratio < 0.05:
-        return 'immunofluorescence'
+        return 'Immunofluorescence'
     return 'HE'
 
 def read_10x_data(data_path: str) -> anndata.AnnData:
@@ -373,9 +373,8 @@ def preprocess_adata(adata: anndata.AnnData,
         sc.pp.filter_genes(adata, min_cells=3)
         sc.pp.normalize_total(adata, target_sum=1e4)
         sc.pp.log1p(adata)
-        sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=10000)
-        adata = adata[:, adata.var.highly_variable]
 
+    sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=10000, subset=True)
     return adata
 
 def prepare_stdata(section_name: str = None,
@@ -496,7 +495,7 @@ def prepare_stdata(section_name: str = None,
     return st_data
 
 
-def select_svgs(section: STData | list[STData],
+def select_svgs(section: Union[STData, List[STData]],
                 n_top_genes: int = 3000,
                 method: str = 'moran'):
     """
@@ -505,7 +504,7 @@ def select_svgs(section: STData | list[STData],
 
     Parameters
     ----------
-    section : STData | list[STData]
+    section : Union[STData, List[STData]]
         STData object or list of STData objects.
     n_top_genes : int
         Number of top SVGs to select, defaults to 3000.

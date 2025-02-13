@@ -22,6 +22,7 @@ from sklearn.mixture import GaussianMixture
 from .data import HE_Prediction_Dataset, HE_Dataset, HE_Score_Dataset, STData
 from .model import SpaHDmapUnet, GraphAutoEncoder
 from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, cluster_score, visualize_score, visualize_cluster
+from typing import Optional, Union, List, Dict
 
 
 class Mapper:
@@ -53,10 +54,10 @@ class Mapper:
     """
 
     def __init__(self,
-                 section: STData | list[STData],
+                 section: Union[STData, List[STData]],
                  results_path: str,
                  rank: int = 20,
-                 reference: dict = None,
+                 reference: Optional[Dict[str, str]] = None,
                  verbose: bool = False):
 
         self.rank = rank
@@ -91,7 +92,12 @@ class Mapper:
                      'total_iter_train': 2000, 'fix_iter_train': 1000}
         self.args = types.SimpleNamespace(**args_dict)
 
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        self.device = torch.device('cuda')
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+            torch.backends.cudnn.benchmark = True
+        else:
+            torch.device('cpu')
         print(f'*** Using GPU ***' if torch.cuda.is_available() else '*** Using CPU ***')
 
         self.model = SpaHDmapUnet(rank=self.rank, num_genes=self.num_genes,
@@ -316,6 +322,9 @@ class Mapper:
         for name, p in self.model.named_parameters():
             p.requires_grad = True
 
+        # Enable mixed precision training
+        self.scaler = torch.cuda.amp.GradScaler()
+
         # Prepare the training dataset
         self.train_dataset = torch.utils.data.ConcatDataset([
             HE_Prediction_Dataset(section=section, args=self.args) for name, section in self.section.items()
@@ -323,7 +332,7 @@ class Mapper:
 
         # Prepare the training loader
         self.train_loader = DataLoader(dataset=self.train_dataset, batch_size=self.args.batch_size, shuffle=True,
-                                       drop_last=False, num_workers=self.args.num_workers)
+                                       drop_last=False, pin_memory=True, num_workers=self.args.num_workers)
 
         # Prepare the loss, optimizer and scheduler
         self.loss = nn.MSELoss()
@@ -333,7 +342,6 @@ class Mapper:
 
     def _pretrain_model(self):
         # Prepare the pre-training process
-
         self._prepare_pretrain()
 
         # Start the pre-training process
@@ -347,12 +355,17 @@ class Mapper:
                 img = img.to(self.device)
                 img = nn.UpsamplingBilinear2d(size=256)(img)
 
-                out = self.model(img)
+                # Automatic mixed precision training
+                with torch.cuda.amp.autocast():
+                    out = self.model(img)
+                    loss = self.loss(out, img)
 
-                loss = self.loss(out, img)
                 self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+
                 self.scheduler.step()
 
                 rec_loss += loss
@@ -637,7 +650,7 @@ class Mapper:
         """
 
         for i in range(spot_score.shape[0]):
-            smooth_input = spot_score[i, :, :]  # Input before iteration
+            smooth_input = spot_score[i, :, :].astype(np.float32)  # Input before iteration
             nonzero_index_input = np.where(smooth_input != 0)
             if len(nonzero_index_input) == 0: continue
             mean_score_input = smooth_input[nonzero_index_input[0], nonzero_index_input[1]].mean()
@@ -657,7 +670,7 @@ class Mapper:
             if mean_score_output < 0.01: mean_score_output = mean_score_input
 
             smooth_output = np.clip(smooth_output/mean_score_output * mean_score_input, 0, 1) if mean_score_output > 0 else smooth_output
-            spot_score[i, :, :] = smooth_output  # Update the region with smoothed values
+            spot_score[i, :, :] = smooth_output.astype(np.float16)  # Update the region with smoothed values
 
         return spot_score
 
@@ -712,7 +725,7 @@ class Mapper:
         mask = section.mask
 
         # Get the spot score, kernel size, and feasible domain
-        spot_score = section.scores[use_score]
+        spot_score = section.scores[use_score].astype(np.float16)
         kernel_size = section.kernel_size
 
         # Get the extended score
@@ -871,12 +884,15 @@ class Mapper:
             epoch += 1
 
     def get_SpaHDmap_score(self,
-                              save_score: bool=False):
+                           use_score: str='GCN',
+                           save_score: bool=False,):
         """
         Get the SpaHDmap scores for each section.
 
         Parameters
         ----------
+        use_score : str
+            Which score used to get VD score.
         save_score : bool
             Whether to save the SpaHDmap scores or not.
         """
@@ -884,13 +900,16 @@ class Mapper:
         self.model.training_mode = True
         self.model.eval()
 
+        # Convert model to half precision for inference
+        self.model = self.model.half()
+
         for name, section in self.section.items():
             if self.verbose: print(f'*** Extracting SpaHDmap scores for {name}... ***')
 
-            image = section.image[:, section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]]
+            image = section.image[:, section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]].astype(np.float16)
 
             # Get the extended score
-            extended_score = self._get_extended_score(section)
+            extended_score = self._get_extended_score(section, use_score)
 
             # Get the SpaHDmap scores
             section.scores['SpaHDmap'] = self._extract_embedding(image, extended_score)
@@ -905,7 +924,10 @@ class Mapper:
             # Mask out the low signal regions
             section.mask[np.where(tmp_score.sum(0) < 15)] = 0
 
+        # Convert model back to full precision
+        self.model = self.model.float()
         self.model.train()
+        torch.cuda.empty_cache()
 
     def _extract_embedding(self,
                            image: np.ndarray,
@@ -926,7 +948,7 @@ class Mapper:
             The extracted embedding.
         """
 
-        # Calculate the settings (e.g., bound width, overlap, etc.)
+        # Calculate settings (e.g., bound width, overlap, etc.)
         bound_width = math.ceil(self.args.bound_ratio * self.args.split_size)
         frame = torch.zeros((self.args.split_size, self.args.split_size), dtype=torch.float16, device=self.device, requires_grad=False)
         frame[bound_width:-bound_width, bound_width:-bound_width] = 1
@@ -943,7 +965,7 @@ class Mapper:
             sub_scores = sub_scores.to(self.device)
 
             with torch.no_grad():
-                sub_embeddings = self.model(image=sub_images, vd_score=sub_scores, encode_only=True).half()
+                sub_embeddings = self.model(image=sub_images, vd_score=sub_scores, encode_only=True)
                 sub_embeddings = sub_embeddings * frame
 
             for i, (start_row, start_col) in enumerate(zip(start_rows, start_cols)):
@@ -960,7 +982,7 @@ class Mapper:
         return embeddings
 
     def cluster(self,
-                section: str | STData | list[str | STData] = None,
+                section: Union[str, STData, List[Union[str, STData]]] = None,
                 use_score: str = 'SpaHDmap',
                 resolution: float = 0.8,
                 n_neighbors: int = 50,
@@ -1002,7 +1024,7 @@ class Mapper:
             self.visualize(section=section, score=use_score, target='cluster', show=show)
 
     def visualize(self,
-                  section: str | STData | list[str | STData] = None,
+                  section: Optional[Union[str, STData, List[Union[str, STData]]]] = None,
                   score: str = 'SpaHDmap',
                   target: str = 'score',
                   index: int = None,

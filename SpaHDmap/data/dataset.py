@@ -120,7 +120,7 @@ class HE_Dataset(Dataset):
         """
 
         # Get the VD score for the tissue
-        vd_score = self.VD_score[idx]
+        vd_score = self.VD_score[idx].astype(np.float32)
 
         # Get the sub-image of the tissue
         tissue_coord = self.tissue_coord[idx, :]

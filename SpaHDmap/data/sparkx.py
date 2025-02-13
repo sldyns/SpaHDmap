@@ -2,7 +2,7 @@ import numpy as np
 from scipy import sparse
 from scipy.stats import ncx2, cauchy
 from numba import jit
-from typing import Optional, Union, List, Dict
+from typing import Optional, Union, List
 from scipy.integrate import quad
 from concurrent.futures import ProcessPoolExecutor
 import warnings

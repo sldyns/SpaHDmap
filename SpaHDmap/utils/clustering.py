@@ -5,9 +5,9 @@ from sknetwork.clustering import Louvain
 from sklearn.cluster import KMeans
 from ..data import STData
 import cv2
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 
-def cluster_score(section: STData | list[STData],
+def cluster_score(section: Union[STData, List[STData]],
                  use_score: str,
                  resolution: float = 0.8,
                  n_neighbors: int = 50,
