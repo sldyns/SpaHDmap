@@ -173,7 +173,7 @@ class STData:
         tmp_col_range = (max(0, min_coords[1] - self.radius), min(image.shape[1], max_coords[1] + self.radius + 1))
 
         # Process the image
-        image = image / np.max(image, axis=(0, 1), keepdims=True)
+        image = (image / np.max(image, axis=(0, 1), keepdims=True)).astype(np.float32)
 
         hires_shape = (math.ceil(image.shape[0] / self.scale_rate), math.ceil(image.shape[1] / self.scale_rate))
         lowres_shape = (math.ceil(image.shape[0] / 16), math.ceil(image.shape[1] / 16))

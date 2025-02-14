@@ -86,7 +86,7 @@ class Mapper:
         args_dict = {'num_channels': self.num_channels, 'split_size': 256, 'smooth_threshold': 0.01,
                      'redundant_ratio': 0.2, 'overlap_ratio': 0.15, 'bound_ratio': 0.05,
 
-                     'num_workers': 4, 'batch_size': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5, 'lda': 0.1,
+                     'num_workers': 4, 'batch_size': 32, 'batch_size_train': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5, 'lda': 0.1,
                      'total_iter_pretrain': 5000, 'rec_iter': 200, 'eta_min': 1e-6,
                      'lr': 0.005, 'total_iter_gcn': 5000, 'weight_image': 0.67, 'weight_exp': 0.33,
                      'total_iter_train': 2000, 'fix_iter_train': 1000}
@@ -289,7 +289,9 @@ class Mapper:
 
         return np.vstack((start_indices, end_indices)).T
 
-    def pretrain(self, save_model: bool = True):
+    def pretrain(self,
+                 save_model: bool = True,
+                 load_model: bool = True):
         """
         Pre-train the SpaHDmap model based on the image prediction.
 
@@ -297,11 +299,13 @@ class Mapper:
         ----------
         save_model : bool
             Whether to save the model or not. Defaults to True.
+        load_model : bool
+            Whether to load the model or not. Defaults to True.
         """
 
         self.model.training_mode = False
 
-        if os.path.exists(self.pretrain_path):
+        if load_model and os.path.exists(self.pretrain_path):
             print(f'*** Pre-trained model found at {self.pretrain_path}, loading... ***')
             ckpt = torch.load(self.pretrain_path)
             for name in list(ckpt.keys()):
@@ -321,8 +325,8 @@ class Mapper:
         self.model.train()
         for name, p in self.model.named_parameters():
             p.requires_grad = True
-
-        # Enable mixed precision training
+        
+        # Enable mixed precision training 
         self.scaler = torch.cuda.amp.GradScaler()
 
         # Prepare the training dataset
@@ -359,15 +363,15 @@ class Mapper:
                 with torch.cuda.amp.autocast():
                     out = self.model(img)
                     loss = self.loss(out, img)
-
+                    
                 self.optimizer.zero_grad()
-
+                
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
-
+                
                 self.scheduler.step()
-
+                
                 rec_loss += loss
 
                 if current_iter % self.args.rec_iter == 0:
@@ -753,7 +757,7 @@ class Mapper:
         )
 
         # Prepare the training loader
-        self.train_loader = DataLoader(dataset=self.train_dataset, batch_size=self.args.batch_size, shuffle=True,
+        self.train_loader = DataLoader(dataset=self.train_dataset, batch_size=self.args.batch_size_train, shuffle=True,
                                        drop_last=False, num_workers=0, collate_fn=lambda x: x)
         self.num_batches = len(self.train_loader)
 
@@ -775,7 +779,8 @@ class Mapper:
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.args.fix_iter_train, eta_min=self.args.eta_min)
 
     def train(self,
-              save_model: bool = True):
+              save_model: bool = True,
+              load_model: bool = True):
         """
         Train the SpaHDmap model based on the image prediction and spot expression reconstruction.
 
@@ -783,11 +788,13 @@ class Mapper:
         ----------
         save_model : bool
             Whether to save the model or not. Defaults to True.
+        load_model : bool
+            Whether to load the model or not. Defaults to True.
         """
 
         self.model.training_mode = True
 
-        if os.path.exists(self.train_path):
+        if load_model and os.path.exists(self.train_path):
             print(f'*** Trained model found at {self.train_path}, loading... ***')
             self.model.load_state_dict(torch.load(self.train_path), strict=False)
         else:
@@ -1084,6 +1091,7 @@ class Mapper:
     def run_SpaHDmap(self,
                      save_score: bool = False,
                      save_model: bool = True,
+                     load_model: bool = True,
                      visualize: bool = True):
 
         # Get the NMF score
@@ -1093,7 +1101,7 @@ class Mapper:
 
         # Pre-train the SpaHDmap model
         print('Step 2: Pre-train the SpaHDmap model')
-        self.pretrain(save_model=save_model)
+        self.pretrain(save_model=save_model, load_model=load_model)
 
         # Get the GCN score
         print('Step 3: Train the GCN model')
@@ -1106,7 +1114,7 @@ class Mapper:
 
         # Train the SpaHDmap model
         print('Step 5: Train the SpaHDmap model')
-        self.train(save_model=save_model)
+        self.train(save_model=save_model, load_model=load_model)
 
         # Get the SpaHDmap score
         self.get_SpaHDmap_score(save_score=save_score)

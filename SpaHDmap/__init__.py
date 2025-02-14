@@ -14,4 +14,4 @@ from .data import STData, prepare_stdata, select_svgs
 
 name = "SpaHDmap"
 __version__ = version(name)
-__author__ = "Junjie Tang, Kun Qian"
+__author__ = "Kun Qian, Junjie Tang"
