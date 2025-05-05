@@ -146,7 +146,7 @@ def create_pseudo_spots(feasible_domain: np.ndarray,
 
 def construct_adjacency_matrix(spot_coord: np.ndarray,
                                spot_embeddings: np.ndarray,
-                               num_real_spots: int,
+                               num_sequenced_spots: int,
                                num_neighbors: int = 50) -> sp.coo_matrix:
     """
     Construct the adjacency matrix for the graph.
@@ -156,8 +156,8 @@ def construct_adjacency_matrix(spot_coord: np.ndarray,
             Array containing the coordinates of the spots.
         spot_embeddings (numpy.ndarray): 
             Array containing the embeddings of the spots.
-        num_real_spots (int): 
-            The number of real spots in the dataset.
+        num_sequenced_spots (int): 
+            The number of sequenced spots in the dataset.
         num_neighbors (int): 
             The number of neighbors to consider for each spot.
 
@@ -167,36 +167,36 @@ def construct_adjacency_matrix(spot_coord: np.ndarray,
     """
 
     num_all_spots = spot_coord.shape[0]
-    num_pseudo_spots = num_all_spots - num_real_spots
+    num_pseudo_spots = num_all_spots - num_sequenced_spots
 
     # Calculate the proportional number of pseudo neighbors
-    num_pseudo_neighbors = math.ceil(num_pseudo_spots / num_real_spots * num_neighbors)
+    num_pseudo_neighbors = math.ceil(num_pseudo_spots / num_sequenced_spots * num_neighbors)
 
     # Calculate distances and correlation
     distances = cdist(spot_coord, spot_coord, metric='euclidean')
     correlation_matrix = np.corrcoef(spot_embeddings)
 
-    # Define ranges for real and pseudo spots
-    real_range = np.arange(num_real_spots)
-    pseudo_range = np.arange(num_real_spots, num_all_spots)
+    # Define ranges for sequenced and pseudo spots
+    sequenced_range = np.arange(num_sequenced_spots)
+    pseudo_range = np.arange(num_sequenced_spots, num_all_spots)
 
     # Initialize the adjacency matrix
     rows, cols, values = [], [], []
     for index in range(num_all_spots):
         # Find nearest neighbors based on distance
-        real_indices = real_range[np.argsort(distances[index, real_range])[:num_neighbors]]
+        sequenced_indices = sequenced_range[np.argsort(distances[index, sequenced_range])[:num_neighbors]]
         pseudo_indices = pseudo_range[np.argsort(distances[index, pseudo_range])[:num_pseudo_neighbors]]
 
-        # Select top 2 correlated neighbors from real and pseudo spots
-        if index < num_real_spots:
-            top_real_neighbors = real_indices[np.argsort(-correlation_matrix[index, real_indices])[1:3]]
+        # Select top 2 correlated neighbors from sequenced and pseudo spots
+        if index < num_sequenced_spots:
+            top_sequenced_neighbors = sequenced_indices[np.argsort(-correlation_matrix[index, sequenced_indices])[1:3]]
             top_pseudo_neighbors = pseudo_indices[np.argsort(-correlation_matrix[index, pseudo_indices])[:2]]
         else:
-            top_real_neighbors = real_indices[np.argsort(-correlation_matrix[index, real_indices])[:2]]
+            top_sequenced_neighbors = sequenced_indices[np.argsort(-correlation_matrix[index, sequenced_indices])[:2]]
             top_pseudo_neighbors = pseudo_indices[np.argsort(-correlation_matrix[index, pseudo_indices])[1:3]]
 
         # Combine selections and prepare to update adjacency matrix
-        selected_neighbors = np.hstack((top_real_neighbors, top_pseudo_neighbors))
+        selected_neighbors = np.hstack((top_sequenced_neighbors, top_pseudo_neighbors))
 
         # Collect indices and values to update
         rows.extend([index] * len(selected_neighbors))

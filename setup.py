@@ -1,4 +1,4 @@
 import setuptools
 
 if __name__ == "__main__":
-    setuptools.setup(name="SpaHDmap", version="0.0.6")
+    setuptools.setup(name="SpaHDmap", version="0.0.7")

@@ -86,6 +86,7 @@ class HE_Dataset(Dataset):
 
         self.VD_score = section.scores['VD']
         self.tissue_coord = section.tissue_coord
+        self.row_start, self.col_start = section.row_range[0], section.col_range[0]
 
         self.split_size = args.split_size
         self.redundant_ratio = args.redundant_ratio
@@ -119,11 +120,12 @@ class HE_Dataset(Dataset):
             VD score.
         """
 
+        tissue_coord = self.tissue_coord[idx, :]
         # Get the VD score for the tissue
-        vd_score = self.VD_score[idx].astype(np.float32)
+        vd_score = self.VD_score[:, tissue_coord[0]-self.row_start:tissue_coord[1]-self.row_start,
+                                    tissue_coord[2]-self.col_start:tissue_coord[3]-self.col_start].astype(np.float32)
 
         # Get the sub-image of the tissue
-        tissue_coord = self.tissue_coord[idx, :]
         sub_img = self.image[:, tissue_coord[0]:tissue_coord[1], tissue_coord[2]:tissue_coord[3]]
 
         # Find spots within the tissue bounds
@@ -228,9 +230,9 @@ class HE_Dataset(Dataset):
         return all_coord
 
 class HE_Score_Dataset(Dataset):
-    def __init__(self, image, extended_score, args):
+    def __init__(self, image, VD_score, args):
         self.image = image
-        self.extended_score = extended_score
+        self.VD_score = VD_score
         self.args = args
         self.overlap = math.floor(args.overlap_ratio * args.split_size)
         self.split_size = args.split_size
@@ -253,5 +255,5 @@ class HE_Score_Dataset(Dataset):
             col_start = self.image.shape[2] - self.split_size
 
         sub_image = self.image[:, row_start:row_start + self.split_size, col_start:col_start + self.split_size]
-        sub_score = self.extended_score[:, row_start:row_start + self.split_size, col_start:col_start + self.split_size]
+        sub_score = self.VD_score[:, row_start:row_start + self.split_size, col_start:col_start + self.split_size]
         return sub_image, sub_score, row_start, col_start

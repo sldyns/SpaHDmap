@@ -21,7 +21,7 @@ from sklearn.mixture import GaussianMixture
 
 from .data import HE_Prediction_Dataset, HE_Dataset, HE_Score_Dataset, STData
 from .model import SpaHDmapUnet, GraphAutoEncoder
-from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, cluster_score, visualize_score, visualize_cluster
+from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, cluster_score, visualize_score, visualize_cluster, visualize_gene
 from typing import Optional, Union, List, Dict
 
 
@@ -39,6 +39,8 @@ class Mapper:
         The rank of the NMF model.
     reference : dict
         Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}. Only used for multi-section analysis. Defaults to None.
+    ratio_pseudo_spots : int
+        The ratio of pseudo spots to sequenced spots. Defaults to 5.
     verbose : bool
         Whether to print the progress or not. Defaults to False.
 
@@ -58,10 +60,12 @@ class Mapper:
                  results_path: str,
                  rank: int = 20,
                  reference: Optional[Dict[str, str]] = None,
+                 ratio_pseudo_spots: int = 5,
                  verbose: bool = False):
 
         self.rank = rank
         self.verbose = verbose
+        self.ratio_pseudo_spots = ratio_pseudo_spots
 
         self.section = {section.section_name: section} if isinstance(section, STData) else {s.section_name: s for s in section}
         self.reference = reference
@@ -75,6 +79,7 @@ class Mapper:
             section.save_paths = {
                 'NMF': f'{results_path}/{section_name}/NMF',
                 'GCN': f'{results_path}/{section_name}/GCN',
+                'VD': f'{results_path}/{section_name}/VD',
                 'SpaHDmap': f'{results_path}/{section_name}/SpaHDmap',
             }
         self.model_path = f'{self.results_path}/models/'
@@ -86,9 +91,9 @@ class Mapper:
         args_dict = {'num_channels': self.num_channels, 'split_size': 256, 'smooth_threshold': 0.01,
                      'redundant_ratio': 0.2, 'overlap_ratio': 0.15, 'bound_ratio': 0.05,
 
-                     'num_workers': 4, 'batch_size': 32, 'batch_size_train': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5, 'lda': 0.1,
+                     'num_workers': 4, 'batch_size': 32, 'batch_size_train': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5,
                      'total_iter_pretrain': 5000, 'rec_iter': 200, 'eta_min': 1e-6,
-                     'lr': 0.005, 'total_iter_gcn': 5000, 'weight_image': 0.67, 'weight_exp': 0.33,
+                     'lr': 0.005, 'total_iter_gcn': 5000, 'weight_image': 0.67, 'weight_exp': 0.33, 'weight_reg': 0.5,
                      'total_iter_train': 2000, 'fix_iter_train': 1000}
         self.args = types.SimpleNamespace(**args_dict)
 
@@ -110,6 +115,10 @@ class Mapper:
         self.metagene_NMF = None
         self.metagene_GCN = None
         self.metagene = None
+
+        if self.section.values()[0].image_type == 'Immunofluorescence':
+            self.args.weight_image = 0.1
+            self.args.weight_exp = 0.9
 
         # Get the tissue splits and create pseudo spots
         if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
@@ -145,17 +154,20 @@ class Mapper:
             section.tissue_coord = np.array(tissue_coord)
 
             # Create pseudo spots for the tissue sections.
-            real_spot_coord = section.spot_coord
+            sequenced_spot_coord = section.spot_coord
             feasible_domain = section.feasible_domain
             radius = section.radius
-            num_pseudo_spots = min(round(real_spot_coord.shape[0] / 1000) * 5000, 100000)
+            num_pseudo_spots = int(min(max(0.5, round(sequenced_spot_coord.shape[0] / 1000)) * 1000 * self.ratio_pseudo_spots, 40000))
 
             if self.verbose: print(f'For section {name}, divide the tissue into {len(tissue_coord)} sub-tissues, and create {num_pseudo_spots} pseudo spots.')
 
             # Get the image embeddings
-            pseudo_spot_coord = create_pseudo_spots(feasible_domain=feasible_domain, radius=radius,
-                                                    num_pseudo_spots=num_pseudo_spots)
-            section.all_spot_coord = np.vstack((real_spot_coord, pseudo_spot_coord))
+            if self.ratio_pseudo_spots > 0:
+                pseudo_spot_coord = create_pseudo_spots(feasible_domain=feasible_domain, radius=radius,
+                                                        num_pseudo_spots=num_pseudo_spots)
+                section.all_spot_coord = np.vstack((sequenced_spot_coord, pseudo_spot_coord))
+            else:
+                section.all_spot_coord = sequenced_spot_coord
 
         # Get the nearby spots based on different settings
         self._get_nearby_spots(use_all_spot=False)
@@ -220,6 +232,7 @@ class Mapper:
         self.metagene_NMF = pd.DataFrame(metagene_normalized.T,
                                          columns=[f'Embedding_{i + 1}' for i in range(self.rank)],
                                          index=self.genes)
+        self.metagene_GCN = self.metagene_NMF.copy() # If not using GCN, metagene_GCN is the same as metagene_NMF
 
         # Save the NMF decoder parameters and NMF score
         self.metagene_NMF.to_csv(f'{self.results_path}/metagene_NMF.csv', index=True, header=True)
@@ -237,7 +250,7 @@ class Mapper:
     def _get_nearby_spots(self,
                           use_all_spot: bool = False):
         """
-        Get the nearby spots based on the feasible domain, radius, and real spot coordinates.
+        Get the nearby spots based on the feasible domain, radius, and sequenced spot coordinates.
 
         Parameters
         ----------
@@ -309,7 +322,7 @@ class Mapper:
             print(f'*** Pre-trained model found at {self.pretrain_path}, loading... ***')
             ckpt = torch.load(self.pretrain_path)
             for name in list(ckpt.keys()):
-                if 'low_rank' in name or 'image_pred' in name:
+                if name in ['nmf_decoder', 'gamma'] or 'low_rank' in name or 'image_pred' in name:
                     ckpt.pop(name)
 
             self.model.load_state_dict(ckpt, strict=False)
@@ -581,7 +594,7 @@ class Mapper:
             # Construct the adjacency matrix
             adjacency_matrix = construct_adjacency_matrix(spot_coord=section.all_spot_coord,
                                                           spot_embeddings=all_image_embeddings,
-                                                          num_real_spots=NMF_score.shape[0])
+                                                          num_sequenced_spots=NMF_score.shape[0])
 
             # Train the GCN
             if self.verbose: print(f'*** Training GCN for {section.section_name}... ***')
@@ -629,7 +642,7 @@ class Mapper:
 
         all_exp = np.vstack(all_exp)
         LR.fit(all_score, all_exp)
-        self.metagene_GCN = LR.coef_.T
+        self.metagene_GCN.loc[:, :] = LR.coef_
 
     def _smooth(self,
                 spot_score: np.ndarray,
@@ -690,55 +703,21 @@ class Mapper:
         """
 
         for name, section in self.section.items():
+            # Determine the mask and nearby spots
+            nearby_spots = section.all_nearby_spots if use_score == 'GCN' else section.nearby_spots
+            mask = section.mask
+
+            # Get the spot score, kernel size, and feasible domain
+            spot_score = section.scores[use_score].astype(np.float16)
+            kernel_size = section.kernel_size
+
             # Get the extended score
-            extended_score = self._get_extended_score(section, use_score)
+            extended_score = np.reshape(spot_score[nearby_spots, :], (mask.shape[0], mask.shape[1], -1))
+            extended_score = np.transpose(extended_score, (2, 0, 1))
+            extended_score = self._smooth(extended_score, kernel_size, threshold=self.args.smooth_threshold)
+            extended_score = extended_score * np.expand_dims(mask, axis=0)
 
-            # Get the coordinates for the tissue
-            num_images = section.tissue_coord.shape[0]
-            tmp_coords = section.tissue_coord.copy()
-            tmp_coords[:, :2] -= section.row_range[0]
-            tmp_coords[:, 2:] -= section.col_range[0]
-
-            # Get the VD score for each patch
-            VD_score = [extended_score[:, tmp_coords[i, 0]:tmp_coords[i, 1], tmp_coords[i, 2]:tmp_coords[i, 3]]
-                        for i in range(num_images)]
-
-            section.scores['VD'] = np.array(VD_score)
-
-    def _get_extended_score(self,
-                            section: STData,
-                            use_score: str = 'GCN') -> np.ndarray:
-        """
-        Get the extended score for the given section.
-
-        Parameters
-        ----------
-        section : STData
-            The spatial object.
-        use_score : str
-            The type of embedding to be visualized.
-
-        Returns
-        -------
-        extended_score : numpy.ndarray
-            Array of extended scores.
-        """
-
-        # Determine the mask and nearby spots
-        nearby_spots = section.all_nearby_spots
-        mask = section.mask
-
-        # Get the spot score, kernel size, and feasible domain
-        spot_score = section.scores[use_score].astype(np.float16)
-        kernel_size = section.kernel_size
-
-        # Get the extended score
-        extended_score = np.reshape(spot_score[nearby_spots, :], (mask.shape[0], mask.shape[1], -1))
-        extended_score = np.transpose(extended_score, (2, 0, 1))
-        extended_score = self._smooth(extended_score, kernel_size, threshold=self.args.smooth_threshold)
-        extended_score = extended_score * np.expand_dims(mask, axis=0)
-
-        return extended_score
+            section.scores['VD'] = extended_score
 
     def _prepare_train(self,
                        load_decoder_params: bool = True):
@@ -763,7 +742,7 @@ class Mapper:
 
         # Load the decoder parameters
         if load_decoder_params:
-            self.model.nmf_decoder.data = torch.tensor(self.metagene_GCN.T, dtype=torch.float32, device=self.device,
+            self.model.nmf_decoder.data = torch.tensor(self.metagene_GCN.values, dtype=torch.float32, device=self.device,
                                                        requires_grad=True)
 
         # Set the model to training mode
@@ -864,7 +843,7 @@ class Mapper:
                     mask = torch.where(HR_score > 0.95)  # batch x rank x row x col
                     reg = F.mse_loss((1 - vd_score[mask]) ** 2 * HR_score[mask],
                                      (1 - vd_score[mask]) ** 2 * vd_score[mask]) if len(mask[0]) > 0 else 0
-                    loss += 0.5 * reg / len(data)
+                    loss += self.args.weight_reg * reg / len(data)
 
                     rec_loss_image += loss_image
                     rec_loss_exp += loss_exp
@@ -891,22 +870,19 @@ class Mapper:
             epoch += 1
 
     def get_SpaHDmap_score(self,
-                           use_score: str='GCN',
-                           save_score: bool=False,):
+                           save_score: bool=False):
         """
         Get the SpaHDmap scores for each section.
 
         Parameters
         ----------
-        use_score : str
-            Which score used to get VD score.
         save_score : bool
             Whether to save the SpaHDmap scores or not.
         """
-
+        
         self.model.training_mode = True
         self.model.eval()
-
+        
         # Convert model to half precision for inference
         self.model = self.model.half()
 
@@ -915,11 +891,8 @@ class Mapper:
 
             image = section.image[:, section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]].astype(np.float16)
 
-            # Get the extended score
-            extended_score = self._get_extended_score(section, use_score)
-
             # Get the SpaHDmap scores
-            section.scores['SpaHDmap'] = self._extract_embedding(image, extended_score)
+            section.scores['SpaHDmap'] = self._extract_embedding(image, section.scores['VD'])
 
             if save_score:
                 os.makedirs(section.save_paths['SpaHDmap'], exist_ok=True)
@@ -938,7 +911,7 @@ class Mapper:
 
     def _extract_embedding(self,
                            image: np.ndarray,
-                           extended_score: np.ndarray) -> np.ndarray:
+                           VD_score: np.ndarray) -> np.ndarray:
         """
         Extract the embedding based on the image and extended score.
 
@@ -946,7 +919,7 @@ class Mapper:
         ----------
         image : numpy.ndarray
             The cropped image.
-        extended_score : numpy.ndarray
+        VD_score : numpy.ndarray
             The extended score.
 
         Returns
@@ -961,11 +934,14 @@ class Mapper:
         frame[bound_width:-bound_width, bound_width:-bound_width] = 1
         frame_np = frame.cpu().numpy()
 
-        dataset = HE_Score_Dataset(image, extended_score, self.args)
+        image = np.pad(image, ((0, 0), (bound_width, bound_width), (bound_width, bound_width)), mode='constant', constant_values=0)
+        VD_score = np.pad(VD_score, ((0, 0), (bound_width, bound_width), (bound_width, bound_width)), mode='constant', constant_values=0)
+
+        dataset = HE_Score_Dataset(image, VD_score, self.args)
         dataloader = DataLoader(dataset, batch_size=self.args.batch_size, shuffle=False, num_workers=0)
 
-        embeddings = torch.zeros(extended_score.shape, dtype=torch.float16, device=self.device, requires_grad=False)
-        counts = np.zeros(extended_score.shape[1:], dtype=np.float16)
+        embeddings = torch.zeros(VD_score.shape, dtype=torch.float16, device=self.device, requires_grad=False)
+        counts = np.zeros(VD_score.shape[1:], dtype=np.float16)
 
         for sub_images, sub_scores, start_rows, start_cols in dataloader:
             sub_images = sub_images.to(self.device)
@@ -985,6 +961,9 @@ class Mapper:
         # Return the average embeddings
         embeddings = embeddings.cpu().numpy()
         embeddings = embeddings / counts
+
+        # Remove the padding
+        embeddings = embeddings[:, bound_width:-bound_width, bound_width:-bound_width]
         torch.cuda.empty_cache()
         return embeddings
 
@@ -1028,29 +1007,110 @@ class Mapper:
         )
 
         if show:
-            self.visualize(section=section, score=use_score, target='cluster', show=show)
+            self.visualize(section=section, use_score=use_score, target='cluster', show=show)
+
+    def recovery(self,
+                 gene: Optional[Union[str, List[str]]],
+                 section: Optional[Union[str, STData, List[Union[str, STData]]]] = None,
+                 use_score: str = 'SpaHDmap'):
+        """
+        Recover gene expression and store in section.X dictionary.
+
+        Parameters
+        ----------
+        gene : str or List[str]
+            Gene name(s) to recover expression for, can be a single string or a list of strings
+        section : str, STData or list
+            Sections to recover gene expression for, if None, use all sections
+        use_score : str
+            Score type to use for gene expression recovery, defaults to 'SpaHDmap'
+        """
+        # Process section parameter
+        if section is None:
+            sections = list(self.section.values())
+        elif isinstance(section, str):
+            if section not in self.section:
+                raise ValueError(f"Section '{section}' not found in dataset.")
+            sections = [self.section[section]]
+        elif isinstance(section, STData):
+            sections = [section]
+        elif isinstance(section, list):
+            if all(isinstance(s, str) for s in section):
+                sections = [self.section[s] for s in section]
+            else:
+                sections = section
+        else:
+            raise ValueError("Invalid section parameter type")
+        
+        # Process gene parameter
+        if isinstance(gene, str):
+            genes = [gene]
+        elif isinstance(gene, list):
+            genes = gene
+        else:
+            raise ValueError("Gene parameter must be a string or list of strings")
+        
+        # Ensure all genes are in gene list
+        invalid_genes = [g for g in genes if g not in self.genes]
+        if invalid_genes:
+            raise ValueError(f"The following genes were not found in dataset: {invalid_genes}")
+        
+        # Get gene indices in metagene
+        gene_indices = [list(self.genes).index(g) for g in genes]
+        
+        # Select appropriate metagene based on score type
+        assert use_score in ['NMF', 'GCN', 'VD', 'SpaHDmap'], "Score type must be 'NMF', 'GCN', 'VD', or 'SpaHDmap'"
+
+        if use_score == 'NMF':
+            metagene = self.metagene_NMF
+        elif use_score == 'GCN' or use_score == 'VD':
+            metagene = self.metagene_GCN
+        else:
+            metagene = self.metagene
+
+        # Recover gene expression for each section
+        for section in sections:
+            # Get section's scores
+            if use_score not in section.scores:
+                raise ValueError(f"Score type '{use_score}' not found in section {section.section_name}")
+            
+            score = section.scores[use_score]
+            
+            # Recover gene expression using the appropriate metagene
+            for gene_name, gene_idx in zip(genes, gene_indices):
+                gene_weights = metagene.iloc[gene_idx].values
+                
+                # Calculate gene expression based on score type
+                gene_expr = np.dot(score, gene_weights) if use_score in ['NMF', 'GCN'] else np.einsum('ehw,e->hw', score, gene_weights)
+                section.X[gene_name] = gene_expr
+            
+            if self.verbose:
+                print(f"Recovered expression for {len(genes)} genes in section {section.section_name}")
 
     def visualize(self,
                   section: Optional[Union[str, STData, List[Union[str, STData]]]] = None,
-                  score: str = 'SpaHDmap',
+                  use_score: str = 'SpaHDmap',
                   target: str = 'score',
+                  gene: str = None,
                   index: int = None,
                   show: bool = True):
         """
-        Visualize scores or clustering results for given sections.
+        Visualize scores, clustering results, or gene expression.
 
         Parameters
         ----------
         section : str or list
-            The section to visualize. If None, uses all sections
-        score : str
+            The section(s) to visualize. If None, uses all sections
+        use_score : str
             The type of score to visualize (e.g., 'NMF', 'GCN', 'SpaHDmap')
         target : str
-            What to visualize - either 'score' or 'cluster'
+            What to visualize - either 'score', 'cluster', or 'gene'
+        gene : str
+            Gene name to visualize when target='gene'
         index : int
             For score visualization only - the index of embedding to show. Defaults to None
         show : bool
-            Whether to display the plot using plt.show(). Defaults to True.
+            Whether to display the plot using plt.show(). Defaults to True
         """
         # Process section input
         if section is None:
@@ -1071,22 +1131,34 @@ class Mapper:
             else:
                 section = section
 
-        if score not in ['NMF', 'GCN', 'VD', 'SpaHDmap']:
+        if use_score not in ['NMF', 'GCN', 'VD', 'SpaHDmap']:
             raise ValueError("Score must be 'NMF', 'GCN', 'VD', or 'SpaHDmap'.")
+        if target not in ['score', 'cluster', 'gene']:
+            raise ValueError("Target must be 'score', 'cluster', or 'gene'.")
 
         # Call appropriate visualization function
         if target == 'score':
             if index is not None:
                 assert 0 <= index < self.rank, f"Index must be less than rank ({self.rank})"
-            assert section[0].scores[score] is not None, f"Score {score} not available"
-            visualize_score(section=section, use_score=score, index=index, verbose=self.verbose)
+            assert section[0].scores[use_score] is not None, f"Score {use_score} not available"
+            visualize_score(section=section, use_score=use_score, index=index, verbose=self.verbose)
 
         elif target == 'cluster':
-            assert section[0].clusters[score] is not None, f"Clustering for {score} not available"
-            visualize_cluster(section=section, use_score=score, show=show, verbose=self.verbose)
+            assert section[0].clusters[use_score] is not None, f"Clustering for {use_score} not available"
+            visualize_cluster(section=section, use_score=use_score, show=show, verbose=self.verbose)
+
+        elif target == 'gene':
+            assert gene is not None, "Must specify gene name to visualize"
+            assert gene in self.genes, f"Gene '{gene}' does not exist in dataset"
+            
+            # Check if gene has been recovered, if not recover it
+            if not hasattr(section[0], 'X') or gene not in section[0].X:
+                self.recovery(gene=gene, section=section, use_score=use_score)
+            
+            visualize_gene(section=section, gene=gene, use_score=use_score, show=show, verbose=self.verbose)
 
         else:
-            raise ValueError("Target must be 'score' or 'cluster'")
+            raise ValueError("Target must be 'score', 'cluster', or 'gene'")
 
     def run_SpaHDmap(self,
                      save_score: bool = False,
@@ -1097,7 +1169,7 @@ class Mapper:
         # Get the NMF score
         print('Step 1: Run NMF')
         self.get_NMF_score(save_score=save_score)
-        if visualize: self.visualize(score='NMF')
+        if visualize: self.visualize(use_score='NMF')
 
         # Pre-train the SpaHDmap model
         print('Step 2: Pre-train the SpaHDmap model')
@@ -1106,7 +1178,7 @@ class Mapper:
         # Get the GCN score
         print('Step 3: Train the GCN model')
         self.get_GCN_score(save_score=save_score)
-        if visualize: self.visualize(score='GCN')
+        if visualize: self.visualize(use_score='GCN')
 
         # Get the VD score
         print('Step 4: Run Voronoi Diagram')
@@ -1118,4 +1190,4 @@ class Mapper:
 
         # Get the SpaHDmap score
         self.get_SpaHDmap_score(save_score=save_score)
-        if visualize: self.visualize(score='SpaHDmap')
+        if visualize: self.visualize(use_score='SpaHDmap')

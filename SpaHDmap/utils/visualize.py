@@ -58,11 +58,11 @@ def visualize_score(section: Union[STData, List[STData]],
 
         if index is None:
             os.makedirs(save_path, exist_ok=True)
-            if use_score == 'SpaHDmap':
+            if use_score in ['SpaHDmap', 'VD']:
                 os.makedirs(os.path.join(save_path, 'gray'), exist_ok=True)
                 os.makedirs(os.path.join(save_path, 'color'), exist_ok=True)
 
-        if use_score != 'SpaHDmap':
+        if use_score in ['NMF', 'GCN']:
             nearby_spots = section.nearby_spots if use_score == 'NMF' else section.all_nearby_spots
 
             score = score[nearby_spots, :]
@@ -77,7 +77,7 @@ def visualize_score(section: Union[STData, List[STData]],
             if index is not None: idx = index
 
             # Normalize
-            tmp_score = score[idx, :, :] if use_score == 'SpaHDmap' else score[idx, :, :] / score[idx, :, :].max()
+            tmp_score = score[idx, :, :] if use_score in ['SpaHDmap', 'VD'] else score[idx, :, :] / score[idx, :, :].max()
             normalized_score = tmp_score * 255
 
             # Apply mask filtering
@@ -100,10 +100,10 @@ def visualize_score(section: Union[STData, List[STData]],
                 break
 
             # Save the score image
-            image_path = os.path.join(save_path, 'gray', f'Embedding_{idx}.png') if use_score == 'SpaHDmap' else os.path.join(save_path, f'Embedding_{idx}.png')
+            image_path = os.path.join(save_path, 'gray', f'Embedding_{idx}.png') if use_score in ['SpaHDmap', 'VD'] else os.path.join(save_path, f'Embedding_{idx}.png')
             cv2.imwrite(image_path, filtered_score)
 
-            if use_score != 'SpaHDmap': continue
+            if use_score in ['NMF', 'GCN']: continue
 
             # Save the colorized score image
             cv2.imwrite(os.path.join(save_path, 'color', f'Embedding_{idx}.png'), color_img)
@@ -197,4 +197,107 @@ def visualize_cluster(section: Union[STData, List[STData]],
         if show:
             plt.imshow(cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB))
             plt.axis('off')
+            plt.show()
+
+def visualize_gene(section: Union[STData, List[STData]],
+                  gene: str,
+                  use_score: str = 'SpaHDmap',
+                  scale: float = 4.,
+                  show: bool = True,
+                  verbose: bool = False):
+    """
+    Visualize gene expression.
+
+    Parameters
+    ----------
+    section : STData or list[STData]
+        Section or list of sections to visualize
+    gene : str
+        Name of the gene to visualize
+    use_score : str
+        Score type used to recover gene expression
+    scale : float
+        Scale factor for visualization, defaults to 4.0
+    show : bool
+        Whether to display the plot using plt.show(), defaults to True
+    verbose : bool
+        Whether to print verbose output
+    """
+    if verbose: print(f"*** Visualizing expression of gene {gene}... ***")
+    
+    sections = [section] if isinstance(section, STData) else section
+    
+    for section in sections:
+        # Check if gene has been recovered
+        if not hasattr(section, 'X') or gene not in section.X:
+            raise ValueError(f"Expression for gene '{gene}' not found in section {section.section_name}. "
+                           f"Please use recovery() function first.")
+        
+        # Get gene expression
+        gene_expr = section.X[gene]
+        mask = section.mask
+        
+        # Create necessary folders
+        base_path = os.path.join(section.save_paths[use_score], 'genes')
+        color_path = os.path.join(base_path, 'color')
+        gray_path = os.path.join(base_path, 'gray')
+        npy_path = os.path.join(base_path, 'npy')
+        
+        for path in [base_path, color_path, gray_path, npy_path]:
+            os.makedirs(path, exist_ok=True)
+        
+        # Save the raw numpy array of gene expression
+        np.save(os.path.join(npy_path, f"{gene}.npy"), gene_expr)
+        
+        # Determine if expression is 1D (spot-level) or 2D (pixel-level)
+        is_spot_level = len(gene_expr.shape) == 1
+        
+        if is_spot_level:
+            # For spot-level expression (from NMF or GCN), map to spatial coordinates
+            nearby_spots = section.nearby_spots if use_score == 'NMF' else section.all_nearby_spots
+            
+            # Create spatial expression map
+            spatial_expr = np.zeros(mask.shape)
+            for i, spot_idx in enumerate(nearby_spots):
+                if spot_idx >= 0 and spot_idx < len(gene_expr):
+                    r, c = np.unravel_index(i, mask.shape)
+                    spatial_expr[r, c] = gene_expr[spot_idx]
+            
+            # Apply mask
+            spatial_expr = spatial_expr * mask
+        else:
+            # For pixel-level expression (from SpaHDmap or VD), already in spatial format
+            spatial_expr = gene_expr
+        
+        # Normalize expression for visualization
+        max_expr = np.max(spatial_expr[mask > 0]) if np.any(mask > 0) else 1
+        norm_expr = (spatial_expr / max_expr * 255) if max_expr > 0 else spatial_expr
+        
+        # Save grayscale image
+        cv2.imwrite(os.path.join(gray_path, f"{gene}.png"), norm_expr.astype(np.uint8))
+        
+        # Create colored visualization
+        resized_expr = cv2.resize(norm_expr.astype(np.uint8),
+                                 (int(norm_expr.shape[1] / scale), 
+                                  int(norm_expr.shape[0] / scale)))
+        
+        # Create background mask
+        background = np.where(cv2.resize(mask.astype(np.uint8), 
+                                        (int(mask.shape[1] / scale), 
+                                         int(mask.shape[0] / scale)), 
+                                        cv2.INTER_NEAREST) == 0)
+        
+        # Colorize
+        color_img = color_maps_emb[resized_expr]
+        color_img[background] = [128, 128, 128]  # Set background to gray
+        
+        # Save colored image
+        cv2.imwrite(os.path.join(color_path, f"{gene}.png"), color_img)
+        
+        if show:
+            plt.figure(figsize=(10, 8))
+            plt.title(f"Expression of gene {gene} - {section.section_name}")
+            plt.imshow(cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB))
+            plt.axis('off')
+            plt.colorbar(shrink=0.8)
             plt.show()

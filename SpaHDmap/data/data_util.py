@@ -11,7 +11,9 @@ import math
 import cv2
 import warnings
 import pickle
+import os
 from .sparkx import sparkx
+from .bsp import bsp
 
 class STData:
     """
@@ -42,7 +44,8 @@ class STData:
                  scale_rate: float,
                  radius: float,
                  swap_coord: bool = True,
-                 create_mask: bool = True):
+                 create_mask: bool = True,
+                 image_type: Optional[str] = None):
 
         # Process the AnnData object
         self.adata = preprocess_adata(adata, swap_coord)
@@ -56,7 +59,7 @@ class STData:
         # Initialize the STData object
         self.section_name = section_name
         self.scale_rate = scale_rate
-        self.radius = int(radius / scale_rate)
+        self.radius = round(radius / scale_rate)
         self.kernel_size = self.radius // 2 * 2 + 1
 
         # Initialize the scores and save_paths dictionaries
@@ -64,9 +67,10 @@ class STData:
         self.scores = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None}
         self.clusters = {'NMF': None, 'GCN': None, 'SpaHDmap': None}
         self.tissue_coord = None
+        self.X = {}
 
         # Preprocess the image and spot expression data
-        self._preprocess(spot_coord, image, create_mask)
+        self._preprocess(spot_coord, image, create_mask, image_type)
 
     @property
     def spot_exp(self):
@@ -151,7 +155,8 @@ class STData:
     def _preprocess(self,
                      spot_coord: np.ndarray,
                      image: np.ndarray,
-                     create_mask: bool):
+                     create_mask: bool,
+                     image_type: str):
         """
         Preprocess spot_coord and prepare the feasible domain and process the image.
 
@@ -181,7 +186,7 @@ class STData:
         hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32) if self.scale_rate != 1 else image
         lowres_image = cv2.resize(image, (lowres_shape[1], lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
 
-        self.image_type = _classify_image_type(lowres_image)
+        self.image_type = _classify_image_type(lowres_image) if image_type is None else image_type
         print(f"Processing image, seems to be {self.image_type} image.")
 
         self.image = np.transpose(hires_image, (2, 0, 1))
@@ -385,6 +390,7 @@ def prepare_stdata(section_name: str = None,
                    radius: float = None,
                    swap_coord: bool = True,
                    create_mask: bool = True,
+                   image_type: Optional[str] = None,
                    **kwargs):
     """
     Prepare STData object from various data sources with priority.
@@ -447,7 +453,12 @@ def prepare_stdata(section_name: str = None,
     # Check for 10 Visium data if AnnData is not available
     elif 'visium_path' in kwargs and kwargs['visium_path'] is not None:
         print(f"*** Reading and preparing Visium data for section {section_name} ***")
-        adata = sc.read_visium(kwargs['visium_path'])
+        count_file = [f for f in os.listdir(kwargs['visium_path']) if f.endswith('.h5')]
+        if not count_file:
+            raise ValueError("No count file found in the Visium directory.")
+        else:
+            count_file = count_file[0]
+        adata = sc.read_visium(kwargs['visium_path'], count_file=count_file)
 
     # Read from scratch if neither AnnData nor 10 Visium is available
     else:
@@ -461,8 +472,13 @@ def prepare_stdata(section_name: str = None,
         adata = sc.read(spot_exp_path)
 
         spot_coord = pd.read_csv(spot_coord_path, index_col=0)
-        spot_coord[['x_coord', 'y_coord']] = spot_coord.iloc[:, :2]
+        spot_coord[['x_coord', 'y_coord']] = spot_coord.iloc[:, -2:]
         spot_coord = spot_coord[['x_coord', 'y_coord']]
+
+        # get the common index between adata and spot_coord
+        common_index = adata.obs_names.intersection(spot_coord.index)
+        adata = adata[common_index, :]
+        spot_coord = spot_coord.loc[common_index]
 
         # Add spot coordinates and image to adata
         adata.obsm['spatial'] = spot_coord.loc[adata.obs_names].values
@@ -491,7 +507,8 @@ def prepare_stdata(section_name: str = None,
                      scale_rate=scale_rate,
                      radius=radius,
                      swap_coord=swap_coord,
-                     create_mask=create_mask)
+                     create_mask=create_mask,
+                     image_type=image_type)
     return st_data
 
 
@@ -556,6 +573,21 @@ def select_svgs(section: Union[STData, List[STData]],
             combined_sparkx = pd.concat(sparkx_pvals, axis=1, keys=[s.section_name for s in sections])
             combined_sparkx['mean_rank'] = combined_sparkx.mean(axis=1).rank(method='dense', ascending=True)
             selected_genes = combined_sparkx.sort_values('mean_rank').head(n_top_genes).index.tolist()
+
+        elif method == 'bsp':
+            # Compute BSP p-values for overlapping genes across all sections
+            bsp_pvals = []
+            for section in sections:
+                counts = section.adata[:, overlap_genes].X
+                location = section.adata.obsm['spatial']
+                pvals = bsp(location, counts)
+                bsp_pvals.append(pd.Series(pvals, index=overlap_genes))
+
+            # Combine BSP p-values and select top n_top_genes (lower p-values are better)
+            combined_bsp = pd.concat(bsp_pvals, axis=1, keys=[s.section_name for s in sections])
+            combined_bsp['mean_rank'] = combined_bsp.mean(axis=1).rank(method='dense', ascending=True)
+            selected_genes = combined_bsp.sort_values('mean_rank').head(n_top_genes).index.tolist()
+
 
         else:
             raise ValueError("Invalid method. Choose either 'moran' or 'sparkx'.")

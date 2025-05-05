@@ -28,6 +28,7 @@ parser.add_argument('--create_mask', type=str2bool, default=True, help='Enable c
 parser.add_argument('--swap_coord', type=str2bool, default=True, help='Enable swapping coordinates.')
 parser.add_argument('--select_svgs', type=str2bool, default=True, help='Enable selecting SVGs.')
 parser.add_argument('--n_top_genes', type=int, default=3000, help='Number of top genes to select.')
+parser.add_argument('--load_model', action='store_true', help='Enable loading model.')
 parser.add_argument('--save_model', type=str2bool, default=True, help='Enable saving model.')
 parser.add_argument('--save_score', action='store_true', help='Enable saving score.')
 parser.add_argument('--verbose', action='store_true', help='Enable verbose output.')
@@ -82,6 +83,15 @@ for idx, section in enumerate(section_list):
     tmp_radius = radius[idx] if radius.__class__ == list else radius
     tmp_scale_rate = scale_rate[idx] if scale_rate.__class__ == list else scale_rate
 
+    if 'id' in section:
+        section_id = section['id']
+        adata = sc.datasets.visium_sge(section_id, include_hires_tiff=True)
+        image_path = adata.uns["spatial"][section_id]["metadata"]["source_image_path"]
+        sections.append(hdmap.prepare_stdata(adata=adata, section_name=section_name, image_path=image_path,
+                                             scale_rate=tmp_scale_rate, radius=tmp_radius,
+                                             swap_coord=args.swap_coord, create_mask=args.create_mask))
+        continue
+
     image_path = section['image_path'] if 'image_path' in section else None
     adata_path = section['adata_path'] if 'adata_path' in section else None
     if adata_path is not None:
@@ -105,5 +115,6 @@ if args.select_svgs: hdmap.select_svgs(sections, n_top_genes=args.n_top_genes)
 mapper = hdmap.Mapper(section=sections, reference=reference, rank=args.rank,
                       results_path=results_path, verbose=args.verbose)
 
-mapper.run_SpaHDmap(save_model=args.save_model, save_score=args.save_score, visualize=args.visualize)
+mapper.run_SpaHDmap(load_model=args.load_model, save_model=args.save_model,
+                    save_score=args.save_score, visualize=args.visualize)
 

@@ -10,10 +10,12 @@ Before using SpaHDmap with command line, you need to prepare a JSON file that co
         "root_path": "your_root_path", // The root path of the experiment, e.g., "./experiments"
         "project": "your_project_name" // The name of the project, e.g., "MBSS1"
     },
-    "section": [
+    "sections": [
         {
             "name": "name of section", // For example, "Section"
+            "id": "10x id of section", // For example, "Section1"
             "image_path": "image path of section", // For example, "data/section/image.tif"
+            "adata_path": "anndata path of section", // For example, "data/section/adata.h5ad"
             "visium_path": "10X Visium path of section", // For example, "data/section/"
             "spot_coord_path": "spot coordinate path of section", // For example, "data/section/spatial/tissue_positions_list.csv"
             "spot_exp_path": "spot expression path of section" // For example, "data/section/filtered_feature_bc_matrix.h5"
@@ -25,8 +27,45 @@ Before using SpaHDmap with command line, you need to prepare a JSON file that co
     }
 }
 ```
+Note that `name` in `section` is required. If `id` is provided, the data will be downloaded from the 10X website and other paths will be ignored.
 
-or,
+Otherwise, `image_path` is required, and other paths will be used according to the following order:
+- if `adata_path` is provided, it will be used, and `visium_path`, `spot_coord_path`, and `spot_exp_path` will be ignored.
+- If `adata_path` is not available, `visium_path` will be used, and `spot_coord_path` and `spot_exp_path` will be ignored.
+- If `visium_path` is also not available, `spot_coord_path` and `spot_exp_path` will be used.
+
+Thus, the section data can be loaded from 10X website, anndata, Visium, or local files using the following examples:
+```json
+{"sections": [
+    // load data from 10X website
+    {
+        "name": "name of section", 
+        "id": "10x id of section"
+    }
+    // or load data from anndata
+    {
+        "name": "name of section", 
+        "image_path": "image path of section",
+        "adata_path": "anndata path of section"
+    }
+    // or load data from local folder
+    {
+        "name": "name of section", 
+        "image_path": "image path of section",
+        "visium_path": "10X Visium path of section"
+    }
+    // or load data from local files
+    {
+        "name": "name of section", 
+        "image_path": "image path of section",
+        "spot_coord_path": "spot coordinate path of section",
+        "spot_exp_path": "spot expression path of section"
+    }
+]
+}
+```
+
+For multi-sections data, the JSON file should be like this:
 
 ```json
 {
@@ -37,14 +76,18 @@ or,
     "sections": [
         {
             "name": "name of section A", // For example, "SectionA"
+            "id": "10x id of section A", // For example, "SectionA"
             "image_path": "image path of section A", // For example, "data/section_A/HE.tif"
+            "adata_path": "anndata path of section A", // For example, "data/section_A/adata.h5ad"
             "visium_path": "10X Visium path of section A", // For example, "data/section_A/"
             "spot_coord_path": "spot coordinate path of section A", // For example, "data/section_A/spatial/tissue_positions_list.csv"
             "spot_exp_path": "spot expression path of section A" // For example, "data/section_A/filtered_feature_bc_matrix.h5"
         },
         {
             "name": "name of section B", // For example, "SectionB"
+            "id": "10x id of section B", // For example, "SectionB"
             "image_path": "image path of section B", // For example, "data/section_B/HE.tif"
+            "adata_path": "anndata path of section B", // For example, "data/section_B/adata.h5ad"
             "visium_path": "10X Visium path of section B", // For example, "data/section_B/"
             "spot_coord_path": "spot coordinate path of section B", // For example, "data/section_B/spatial/tissue_positions_list.csv"
             "spot_exp_path": "spot expression path of section B" // For example, "data/section_B/filtered_feature_bc_matrix.h5"
@@ -57,8 +100,6 @@ or,
     }
 }
 ```
-
-for multi-sections data.
 
 The example JSON files for previous tutorials are as follows:
 - [HE-imaged ST](https://github.com/sldyns/SpaHDmap/blob/main/configs/MPB_HE_Section1.json)

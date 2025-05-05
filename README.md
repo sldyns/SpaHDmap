@@ -35,3 +35,6 @@ in the root of this repository.
 Please refer to the [documentation](https://spahdmap.readthedocs.io/en/latest/) for more details, for examples:
 - to get the detailed information about installation, please refer to the [installation guide](https://spahdmap.readthedocs.io/en/latest/installation.html).
 - to get started with SpaHDmap, please refer to the [tutorials](https://spahdmap.readthedocs.io/en/latest/tutorials/index.html).
+
+## License
+This software package is licensed under MIT license. For commercial use, please contact [Ruibin Xi](ruibinxi@math.pku.edu.cn).

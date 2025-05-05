@@ -47,13 +47,11 @@ class UNetConvBlock(nn.Module):
             Whether to include a downsampling layer.
         relu_slope: float
             Slope for the LeakyReLU activation.
-        last_relu: bool
-            Whether to include a ReLU activation after the last convolution. Default to True.
         use_HIN: bool
             Whether to use Half Instance Normalization. Default to False.
     """
 
-    def __init__(self, in_size, out_size, downsample, relu_slope, last_relu=True, use_HIN=False):
+    def __init__(self, in_size, out_size, downsample, relu_slope, use_HIN=False):
         """
         Initialize the `UNetConvBlock` model.
 
@@ -65,7 +63,7 @@ class UNetConvBlock(nn.Module):
         self.conv_1 = nn.Conv2d(in_size, out_size, kernel_size=3, padding=1, bias=True)
         self.relu_1 = nn.LeakyReLU(relu_slope, inplace=False)
         self.conv_2 = nn.Conv2d(out_size, out_size, kernel_size=3, padding=1, bias=True)
-        self.relu_2 = nn.LeakyReLU(relu_slope, inplace=False) if last_relu else nn.Identity()
+        self.relu_2 = nn.LeakyReLU(relu_slope, inplace=False)
 
         if use_HIN: self.norm = nn.InstanceNorm2d(out_size // 2, affine=True)
         self.use_HIN = use_HIN
@@ -257,7 +255,7 @@ class SpaHDmapUnet(nn.Module):
             feasible_coord: dict
                 Dictionary of feasible coordinates. Default to None.
             vd_score: torch.Tensor
-                Input tensor representing the real spot embeddings. Default to None.
+                Input tensor representing the sequenced spot embeddings. Default to None.
             encode_only: bool
                 Whether to only perform encoding. Default to False.
 
@@ -403,7 +401,7 @@ class GraphAutoEncoder(nn.Module):
         Parameters
         ----------
             score: torch.Tensor
-                Input tensor representing the real spot embeddings.
+                Input tensor representing the sequenced spot embeddings.
 
         Returns
         -------
@@ -413,7 +411,7 @@ class GraphAutoEncoder(nn.Module):
         # Apply sigmoid to latent strengths to limit their values
         pseudo_score = torch.sigmoid(self.pseudo_score)
 
-        # Concatenate the real and pseudo spot embeddings
+        # Concatenate the sequenced and pseudo spot embeddings
         x = torch.cat([score, pseudo_score], dim=0)
 
         # Graph Convolutional Layers
@@ -431,7 +429,7 @@ def __initial_weights__(module):
     # Initialize the weights of the model
 
     if isinstance(module, nn.Conv2d):
-        init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='leaky_relu')
+        init.kaiming_normal_(module.weight, mode='fan_out', a=0.2, nonlinearity='leaky_relu')
         if module.bias is not None:
             init.constant_(module.bias, 0)
     elif isinstance(module, nn.BatchNorm2d):
