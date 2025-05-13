@@ -116,7 +116,7 @@ class Mapper:
         self.metagene_GCN = None
         self.metagene = None
 
-        if self.section.values()[0].image_type == 'Immunofluorescence':
+        if list(self.section.values())[0].image_type == 'Immunofluorescence':
             self.args.weight_image = 0.1
             self.args.weight_exp = 0.9
 
@@ -126,6 +126,10 @@ class Mapper:
 
     def _process_data(self):
         # Divide the tissue area into sub-tissue regions based on split size and redundancy ratio.
+
+        # self.args.split_size = self.args.split_size // list(self.section.values())[0].scale_rate
+        self.args.split_size = int(self.args.split_size // math.sqrt(list(self.section.values())[0].scale_rate) // 16 * 16)
+        print(f'*** The split size is set to {self.args.split_size} pixels. ***')
 
         for name, section in self.section.items():
             # Obtain min and max values for row and column
@@ -370,7 +374,7 @@ class Mapper:
             for img in self.train_loader:
                 current_iter += 1
                 img = img.to(self.device)
-                img = nn.UpsamplingBilinear2d(size=256)(img)
+                img = nn.UpsamplingBilinear2d(size=self.args.split_size)(img)
 
                 # Automatic mixed precision training
                 with torch.cuda.amp.autocast():
@@ -436,8 +440,8 @@ class Mapper:
 
         self.model.eval()
 
-        # Extract sub-images and upsample to 256x256
-        sub_images = nn.UpsamplingBilinear2d(size=256)(self._extract_image(spot_coord, radius, image))
+        # Extract sub-images and upsample to split_size x split_size
+        sub_images = nn.UpsamplingBilinear2d(size=self.args.split_size)(self._extract_image(spot_coord, radius, image))
 
         # Extract image embeddings
         image_embeddings = np.zeros((sub_images.shape[0], embedding_size))

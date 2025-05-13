@@ -126,6 +126,7 @@ All parameters of `run_SpaHDmap.py` are optional. The following are the optional
 - `--swap_coord`: whether to swap the coordinates, default is True
 - `--select_svgs`: whether to select Spatially variable genes, default is True
 - `--n_top_genes`: the number of top genes to select, default is 3000
+- `--load_model`: whether to load the model, use `--load_model` to load the model
 - `--save_model`: whether to save the model, default is True
 - `--save_score`: whether to save the embedding, use `--save_score` to save all scores
 - `--verbose`: whether to print the log information, use `--verbose` to print the log information

@@ -156,7 +156,7 @@ def construct_adjacency_matrix(spot_coord: np.ndarray,
             Array containing the coordinates of the spots.
         spot_embeddings (numpy.ndarray): 
             Array containing the embeddings of the spots.
-        num_sequenced_spots (int): 
+        num_sequenced_spots (int):
             The number of sequenced spots in the dataset.
         num_neighbors (int): 
             The number of neighbors to consider for each spot.
