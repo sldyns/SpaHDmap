@@ -23,10 +23,58 @@ color_maps_cluster = np.array(
     [(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)) for color in color_16form],
     dtype=np.uint8)
 
+
+def save_image(image_data: np.ndarray,
+               save_path: str,
+               filename: str,
+               format: str = 'png',
+               is_color: bool = False):
+    """
+    Save image data to file with specified format.
+    
+    Parameters
+    ----------
+    image_data : np.ndarray
+        Image data to save (grayscale or RGB)
+    save_path : str
+        Directory path to save the image
+    filename : str
+        Filename without extension
+    format : str
+        Output format ('jpg', 'png', 'pdf')
+    is_color : bool
+        Whether the image is color (RGB) or grayscale
+    """
+    # Validate format
+    if format.lower() not in ['jpg', 'jpeg', 'png', 'pdf']:
+        raise ValueError("Format must be 'jpg', 'png', or 'pdf'")
+    
+    file_ext = 'jpg' if format.lower() in ['jpg', 'jpeg'] else format.lower()
+    full_path = os.path.join(save_path, f"{filename}.{file_ext}")
+    
+    if format.lower() == 'pdf':
+        # For PDF, use matplotlib
+        plt.figure(figsize=(8, 6))
+        if is_color:
+            # Convert BGR to RGB for matplotlib
+            plt.imshow(cv2.cvtColor(image_data, cv2.COLOR_BGR2RGB))
+        else:
+            plt.imshow(image_data, cmap='gray')
+        plt.axis('off')
+        plt.tight_layout()
+        plt.savefig(full_path, format='pdf', bbox_inches='tight', dpi=300)
+        plt.close()
+    else:
+        # For jpg/png, use cv2
+        cv2.imwrite(full_path, image_data.astype(np.uint8))
+
+
 def visualize_score(section: Union[STData, List[STData]],
                     use_score: str,
                     index: int = None,
                     scale: float = 4.,
+                    format: str = 'png',
+                    crop: bool = True,
                     verbose: bool = False):
     """
     Save score for given spot coordinates and region scores.
@@ -41,6 +89,10 @@ def visualize_score(section: Union[STData, List[STData]],
         The index of the embedding to be visualized. Defaults to None.
     scale: float, optional
         The scale rate for visualization. Defaults to 4.
+    format: str, optional
+        Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
+    crop: bool, optional
+        Whether to crop to mask region. If False, save full image size. Defaults to True.
     verbose: bool, optional
         Whether to enable verbose output. Defaults to False.
     """
@@ -48,6 +100,12 @@ def visualize_score(section: Union[STData, List[STData]],
     if verbose: print(f"*** Visualizing and saving the embeddings of {use_score}... ***")
 
     sections = [section] if isinstance(section, STData) else section
+
+    # Validate format
+    if format.lower() not in ['jpg', 'jpeg', 'png', 'pdf']:
+        raise ValueError("Format must be 'jpg', 'png', or 'pdf'")
+    
+    file_ext = 'jpg' if format.lower() in ['jpg', 'jpeg'] else format.lower()
 
     # Visualize the embeddings of each section
     for section in sections:
@@ -62,9 +120,8 @@ def visualize_score(section: Union[STData, List[STData]],
                 os.makedirs(os.path.join(save_path, 'gray'), exist_ok=True)
                 os.makedirs(os.path.join(save_path, 'color'), exist_ok=True)
 
-        if use_score in ['NMF', 'GCN']:
-            nearby_spots = section.nearby_spots if use_score == 'NMF' else section.all_nearby_spots
-
+        if use_score in ['NMF', 'GCN', 'SpaHDmap_spot']:
+            nearby_spots = section.nearby_spots if use_score in ['NMF', 'SpaHDmap_spot'] else section.all_nearby_spots
             score = score[nearby_spots, :]
             score = np.reshape(score, (mask.shape[0], mask.shape[1], score.shape[1]))
             score = np.transpose(score, (2, 0, 1))
@@ -95,22 +152,50 @@ def visualize_score(section: Union[STData, List[STData]],
             # Visualize score of the specific index
             if index is not None:
                 color_img_rgb = cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB)
+                plt.figure(figsize=(8, 6))
                 plt.imshow(color_img_rgb)
+                plt.axis('off')
+                plt.tight_layout()
+                if format.lower() == 'pdf':
+                    plt.savefig(f'Embedding_{idx}.pdf', format='pdf', bbox_inches='tight', dpi=300)
                 plt.show()
                 break
 
             # Save the score image
-            image_path = os.path.join(save_path, 'gray', f'Embedding_{idx}.png') if use_score in ['SpaHDmap', 'VD'] else os.path.join(save_path, f'Embedding_{idx}.png')
-            cv2.imwrite(image_path, filtered_score)
+            if crop:
+                # Save cropped version (default behavior)
+                gray_path = os.path.join(save_path, 'gray') if use_score in ['SpaHDmap', 'VD'] else save_path
+                save_image(filtered_score, gray_path, f'Embedding_{idx}', format, is_color=False)
+            else:
+                # Save uncropped version - create full image size and place result in row_range, col_range
+                if use_score in ['SpaHDmap', 'VD']:
+                    full_image = np.zeros((section.image.shape[1], section.image.shape[2]))
+                    full_image[section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]] = filtered_score
+                    gray_path = os.path.join(save_path, 'gray')
+                    save_image(full_image, gray_path, f'Embedding_{idx}_uncrop', format, is_color=False)
+                else:
+                    save_image(filtered_score, save_path, f'Embedding_{idx}_uncrop', format, is_color=False)
 
-            if use_score in ['NMF', 'GCN']: continue
+            if use_score in ['NMF', 'GCN', 'SpaHDmap_spot']: continue
 
             # Save the colorized score image
-            cv2.imwrite(os.path.join(save_path, 'color', f'Embedding_{idx}.png'), color_img)
+            color_path = os.path.join(save_path, 'color')
+            
+            if crop:
+                # Save cropped version (default behavior)
+                save_image(color_img, color_path, f'Embedding_{idx}', format, is_color=True)
+            else:
+                # Save uncropped colorized version - resize color_img back to original resolution and place in full image
+                color_img_full_res = cv2.resize(color_img, (filtered_score.shape[1], filtered_score.shape[0]))
+                full_color_image = np.full((section.image.shape[1], section.image.shape[2], 3), [128, 128, 128], dtype=np.uint8)
+                full_color_image[section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]] = color_img_full_res
+                
+                save_image(full_color_image, color_path, f'Embedding_{idx}_uncrop', format, is_color=True)
 
 def visualize_cluster(section: Union[STData, List[STData]],
                       use_score: str = 'SpaHDmap',
                       scale: float = 4.,
+                      format: str = 'png',
                       show: bool = False,
                       verbose: bool = False):
     """
@@ -124,6 +209,8 @@ def visualize_cluster(section: Union[STData, List[STData]],
         Score type to visualize clustering for
     scale : float
         Scale factor for SpaHDmap visualization. Defaults to 4.
+    format : str
+        Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
     show : bool
         Whether to display the plot using plt.show(). Defaults to False.
     verbose : bool
@@ -173,17 +260,27 @@ def visualize_cluster(section: Union[STData, List[STData]],
             # Create visualization image
             vis_img = np.ones(mask.shape + (3,), dtype=np.uint8) * 255
 
-            # Draw spots
+            # Draw spots - adjust coordinates relative to row_range and col_range
             spot_coords = section.spot_coord
             radius = section.radius
+            row_offset = section.row_range[0]
+            col_offset = section.col_range[0]
+            
             for i in range(n_clusters):
                 spots = spot_coords[spot_labels == i]
                 for coord in spots:
-                    cv2.circle(vis_img,
-                             (int(coord[1]), int(coord[0])),
-                             int(radius),
-                             color_maps_cluster[i % len(color_maps_cluster)].tolist(),
-                             -1)
+                    # Adjust coordinates to mask coordinate system
+                    adjusted_row = int(coord[0] - row_offset)
+                    adjusted_col = int(coord[1] - col_offset)
+                    
+                    # Check if the adjusted coordinates are within the mask bounds
+                    if (0 <= adjusted_row < mask.shape[0] and 
+                        0 <= adjusted_col < mask.shape[1]):
+                        cv2.circle(vis_img,
+                                 (adjusted_col, adjusted_row),
+                                 int(radius),
+                                 color_maps_cluster[i % len(color_maps_cluster)].tolist(),
+                                 -1)
 
             # Set background
             background = np.where(~mask)
@@ -192,7 +289,7 @@ def visualize_cluster(section: Union[STData, List[STData]],
         vis_img[background] = [128, 128, 128]
 
         os.makedirs(save_path, exist_ok=True)
-        cv2.imwrite(os.path.join(save_path, 'clustering.png'), vis_img)
+        save_image(vis_img, save_path, 'clustering', format, is_color=True)
 
         if show:
             plt.imshow(cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB))
@@ -203,6 +300,8 @@ def visualize_gene(section: Union[STData, List[STData]],
                   gene: str,
                   use_score: str = 'SpaHDmap',
                   scale: float = 4.,
+                  format: str = 'png',
+                  crop: bool = True,
                   show: bool = True,
                   verbose: bool = False):
     """
@@ -218,6 +317,10 @@ def visualize_gene(section: Union[STData, List[STData]],
         Score type used to recover gene expression
     scale : float
         Scale factor for visualization, defaults to 4.0
+    format : str
+        Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
+    crop : bool
+        Whether to crop to mask region. If False, save full image size. Defaults to True.
     show : bool
         Whether to display the plot using plt.show(), defaults to True
     verbose : bool
@@ -274,7 +377,13 @@ def visualize_gene(section: Union[STData, List[STData]],
         norm_expr = (spatial_expr / max_expr * 255) if max_expr > 0 else spatial_expr
         
         # Save grayscale image
-        cv2.imwrite(os.path.join(gray_path, f"{gene}.png"), norm_expr.astype(np.uint8))
+        if crop:
+            save_image(norm_expr, gray_path, gene, format, is_color=False)
+        else:
+            # Save uncropped version
+            full_gray = np.zeros((section.image.shape[1], section.image.shape[2]))
+            full_gray[section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]] = norm_expr
+            save_image(full_gray, gray_path, f"{gene}_uncrop", format, is_color=False)
         
         # Create colored visualization
         resized_expr = cv2.resize(norm_expr.astype(np.uint8),
@@ -292,7 +401,14 @@ def visualize_gene(section: Union[STData, List[STData]],
         color_img[background] = [128, 128, 128]  # Set background to gray
         
         # Save colored image
-        cv2.imwrite(os.path.join(color_path, f"{gene}.png"), color_img)
+        if crop:
+            save_image(color_img, color_path, gene, format, is_color=True)
+        else:
+            # Save uncropped colorized version - resize color_img back and place in full image
+            full_color_img = cv2.resize(color_img, (norm_expr.shape[1], norm_expr.shape[0]))
+            full_color = np.full((section.image.shape[1], section.image.shape[2], 3), [128, 128, 128], dtype=np.uint8)
+            full_color[section.row_range[0]:section.row_range[1], section.col_range[0]:section.col_range[1]] = full_color_img
+            save_image(full_color, color_path, f"{gene}_uncrop", format, is_color=True)
         
         if show:
             plt.figure(figsize=(10, 8))

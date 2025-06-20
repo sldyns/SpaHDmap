@@ -41,10 +41,8 @@ def cluster_score(section: Union[STData, List[STData]],
             raise ValueError(f"Score {use_score} not available for section {section.section_name}")
             
         if use_score == 'SpaHDmap':
-            # Adjust coordinates based on row_range and col_range
-            adjusted_coords = section.spot_coord.copy()
-            adjusted_coords[:, 0] -= section.row_range[0]  # Adjust row coordinates
-            adjusted_coords[:, 1] -= section.col_range[0]  # Adjust column coordinates
+            # Use pre-calculated spot score if available
+            spot_score = section.scores['SpaHDmap_spot']
 
             # Resize mask
             mask_scaled = cv2.resize(section.mask.astype(np.uint8), 
@@ -66,12 +64,6 @@ def cluster_score(section: Union[STData, List[STData]],
                                            (int(score.shape[2]/scale),
                                             int(score.shape[1]/scale)))
 
-            spot_score = _calculate_spot_score(
-                score=score,  # Use original resolution score
-                coords=adjusted_coords,  # Use adjusted coordinates
-                radius=section.radius
-            )
-
             # Use scaled score and mask for clustering
             spot_labels = _perform_louvain_clustering(
                 spot_score,
@@ -88,12 +80,12 @@ def cluster_score(section: Union[STData, List[STData]],
         else:
             spot_score = section.scores[use_score]
             
-        # Perform Louvain clustering
-        spot_labels = _perform_louvain_clustering(
-            spot_score,
-            resolution,
-            n_neighbors
-        )
+            # Perform Louvain clustering
+            spot_labels = _perform_louvain_clustering(
+                spot_score,
+                resolution,
+                n_neighbors
+            )
         
         # For SpaHDmap, also get pixel-level clusters
         if use_score == 'SpaHDmap':
@@ -107,46 +99,6 @@ def cluster_score(section: Union[STData, List[STData]],
         if verbose:
             n_clusters = len(np.unique(spot_labels))
             print(f"Found {n_clusters} clusters for section {section.section_name}")
-
-def _calculate_spot_score(score: np.ndarray,
-                         coords: np.ndarray,
-                         radius: float,
-                         quantile: float = 0.5) -> np.ndarray:
-    """Calculate spot-wise score intensities from pixel-level data."""
-    # Convert coordinates to integer type
-    coords_scaled = coords.astype(int)
-    radius_scaled = int(radius)
-    
-    # Generate circular mask for spots
-    y, x = np.ogrid[-radius_scaled:radius_scaled+1, -radius_scaled:radius_scaled+1]
-    circular_mask = x*x + y*y <= radius_scaled*radius_scaled
-    
-    spot_score = np.zeros((len(coords), score.shape[0]))
-    
-    for idx, (row, col) in enumerate(coords_scaled):
-        row_start = max(0, row - radius_scaled)
-        row_end = min(score.shape[1], row + radius_scaled + 1) 
-        col_start = max(0, col - radius_scaled)
-        col_end = min(score.shape[2], col + radius_scaled + 1)
-        
-        mask_row_start = max(0, radius_scaled - row)
-        mask_row_end = min(circular_mask.shape[0], mask_row_start + (row_end - row_start))
-        mask_col_start = max(0, radius_scaled - col)
-        mask_col_end = min(circular_mask.shape[1], mask_col_start + (col_end - col_start))
-        
-        # Extract appropriate portion of circular mask
-        spot_mask = circular_mask[mask_row_start:mask_row_end,
-                                mask_col_start:mask_col_end]
-
-        for d in range(score.shape[0]):
-            spot_region = score[d, row_start:row_end, col_start:col_end]
-            # Make sure spot_region and spot_mask have same dimensions
-            if spot_region.shape == spot_mask.shape:
-                values = spot_region[spot_mask]
-                if len(values) > 0:
-                    spot_score[idx, d] = np.quantile(values, quantile)
-            
-    return spot_score
 
 def _perform_louvain_clustering(embeddings: np.ndarray,
                               resolution: float,

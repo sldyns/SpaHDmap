@@ -8,6 +8,7 @@ import torch
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+import scipy
 
 import cv2
 import math
@@ -23,7 +24,7 @@ from .data import HE_Prediction_Dataset, HE_Dataset, HE_Score_Dataset, STData
 from .model import SpaHDmapUnet, GraphAutoEncoder
 from .utils import create_pseudo_spots, find_nearby_spots, construct_adjacency_matrix, cluster_score, visualize_score, visualize_cluster, visualize_gene
 from typing import Optional, Union, List, Dict
-
+from functools import reduce
 
 class Mapper:
     """
@@ -35,24 +36,27 @@ class Mapper:
         STData or List of STData containing the spatial objects for the sections.
     results_path : str
         The path to save the results.
-    rank : int
-        The rank of the NMF model.
-    reference : dict
-        Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}. Only used for multi-section analysis. Defaults to None.
-    ratio_pseudo_spots : int
+    rank : int, optional
+        The rank of the NMF model. Defaults to 20.
+    reference : dict, optional
+        Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}. 
+        Only used for multi-section analysis. Defaults to None.
+    ratio_pseudo_spots : int, optional
         The ratio of pseudo spots to sequenced spots. Defaults to 5.
-    verbose : bool
+    scale_split_size : bool, optional
+        Whether to scale the split size based on the scale rate. If True, split size will be adjusted 
+        based on the square root of the scale rate. Defaults to False.
+    verbose : bool, optional
         Whether to print the progress or not. Defaults to False.
 
     Example
     -------
-        >>> sections = {}
-        >>> rank = 10
+        >>> import SpaHDmap as hdmap
+        >>> sections = [hdmap.prepare_stdata(...)]  # List of STData objects
+        >>> rank = 20
         >>> results_path = 'results'
-        >>> seed = 123
-        >>> verbose = False
-        >>> mapper = Mapper(sections=sections, results_path=results_path, rank=rank, reference=None, verbose=verbose)
-        >>> mapper.run_SpaHDmap()
+        >>> mapper = hdmap.Mapper(section=sections, results_path=results_path, rank=rank, verbose=True)
+        >>> mapper.run_SpaHDmap(save_score=True, visualize=True)
     """
 
     def __init__(self,
@@ -61,17 +65,36 @@ class Mapper:
                  rank: int = 20,
                  reference: Optional[Dict[str, str]] = None,
                  ratio_pseudo_spots: int = 5,
+                 scale_split_size: bool = False,
                  verbose: bool = False):
+        
+        args_dict = {'split_size': 256, 'smooth_threshold': 0.01,
+                     'redundant_ratio': 0.2, 'overlap_ratio': 0.15, 'bound_ratio': 0.05,
 
+                     'num_workers': 4, 'batch_size': 32, 'batch_size_train': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5,
+                     'total_iter_pretrain': 5000, 'rec_iter': 200, 'eta_min': 1e-6,
+                     'lr': 0.005, 'total_iter_gcn': 5000, 'weight_image': 0.67, 'weight_exp': 0.33, 'weight_reg': 0.5,
+                     'total_iter_train': 2000, 'fix_iter_train': 1000}
+        self.args = types.SimpleNamespace(**args_dict)
+        
         self.rank = rank
         self.verbose = verbose
         self.ratio_pseudo_spots = ratio_pseudo_spots
 
         self.section = {section.section_name: section} if isinstance(section, STData) else {s.section_name: s for s in section}
+
+        # Get the tissue splits and create pseudo spots
+        self.scale_split_size = scale_split_size
+        if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
+
+        if self.section[list(self.section.keys())[0]].scores['SpaHDmap'] is None:
+            self._process_data()
+        else:
+            self.genes = self.section[list(self.section.keys())[0]].genes
+            self.num_genes = len(self.genes)
+
         self.reference = reference
 
-        self.genes = self.section[list(self.section.keys())[0]].genes
-        self.num_genes = self.section[list(self.section.keys())[0]].spot_exp.shape[1]
         self.num_channels = self.section[list(self.section.keys())[0]].image.shape[0]
 
         self.results_path = results_path
@@ -81,23 +104,12 @@ class Mapper:
                 'GCN': f'{results_path}/{section_name}/GCN',
                 'VD': f'{results_path}/{section_name}/VD',
                 'SpaHDmap': f'{results_path}/{section_name}/SpaHDmap',
+                'SpaHDmap_spot': f'{results_path}/{section_name}/SpaHDmap_spot',
             }
         self.model_path = f'{self.results_path}/models/'
         os.makedirs(self.model_path, exist_ok=True)
 
-        self.pretrain_path = f'{self.model_path}/pretrained_model.pth'
-        self.train_path = f'{self.model_path}/trained_model.pth'
-
-        args_dict = {'num_channels': self.num_channels, 'split_size': 256, 'smooth_threshold': 0.01,
-                     'redundant_ratio': 0.2, 'overlap_ratio': 0.15, 'bound_ratio': 0.05,
-
-                     'num_workers': 4, 'batch_size': 32, 'batch_size_train': 32, 'lr_train': 4e-4, 'weight_decay': 1e-5,
-                     'total_iter_pretrain': 5000, 'rec_iter': 200, 'eta_min': 1e-6,
-                     'lr': 0.005, 'total_iter_gcn': 5000, 'weight_image': 0.67, 'weight_exp': 0.33, 'weight_reg': 0.5,
-                     'total_iter_train': 2000, 'fix_iter_train': 1000}
-        self.args = types.SimpleNamespace(**args_dict)
-
-        self.device = torch.device('cuda')
+        self.device = torch.device('cpu')
         if torch.cuda.is_available():
             self.device = torch.device('cuda')
             torch.backends.cudnn.benchmark = True
@@ -106,7 +118,7 @@ class Mapper:
         print(f'*** Using GPU ***' if torch.cuda.is_available() else '*** Using CPU ***')
 
         self.model = SpaHDmapUnet(rank=self.rank, num_genes=self.num_genes,
-                                     num_channels=self.args.num_channels, reference=self.reference)
+                                  num_channels=self.num_channels, reference=self.reference)
         self.model.to(self.device)
 
         self.train_loader = None
@@ -120,15 +132,155 @@ class Mapper:
             self.args.weight_image = 0.1
             self.args.weight_exp = 0.9
 
-        # Get the tissue splits and create pseudo spots
-        if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
-        self._process_data()
+    @property
+    def pretrain_path(self) -> str:
+        """Get the pretrained model path."""
+        return f'{self.model_path}/pretrained_model.pth'
+    
+    @property 
+    def train_path(self) -> str:
+        """Get the trained model path."""
+        return f'{self.model_path}/trained_model.pth'
+
+    def load_metagene(self, result_path: str = None):
+        """
+        Load existing metagenes for transfer learning.
+        
+        Parameters
+        ----------
+        result_path : str, optional
+            Path to the results directory containing metagene files. If None, uses current results_path.
+            Will load both 'metagene_NMF.csv' and 'metagene.csv' from this directory.
+        
+        Notes
+        -----
+        This method should be called before running get_NMF_score() to enable transfer learning.
+        The loaded metagene_NMF will be used to calculate NMF scores via linear regression instead 
+        of performing standard NMF decomposition.
+        """
+        # Use default path if not specified
+        if result_path is None:
+            result_path = self.results_path
+        
+        # Load metagene_NMF
+        metagene_nmf_path = f'{result_path}/metagene_NMF.csv'
+        if not os.path.exists(metagene_nmf_path):
+            raise FileNotFoundError(f"Metagene_NMF file not found: {metagene_nmf_path}")
+        
+        self.metagene_NMF = pd.read_csv(metagene_nmf_path, index_col=0)
+        
+        # Load metagene (final trained metagene)
+        metagene_path = f'{result_path}/metagene.csv'
+        if os.path.exists(metagene_path):
+            self.metagene = pd.read_csv(metagene_path, index_col=0)
+            if self.verbose:
+                print(f"*** Loaded both metagene_NMF and metagene from {result_path} ***")
+        else:
+            if self.verbose:
+                print(f"*** Loaded metagene_NMF from {result_path} (metagene.csv not found, will be generated during training) ***")
+        
+        # Use reference genes as target gene list (maintain order)
+        reference_genes = self.metagene_NMF.index.tolist()
+        current_genes = self.genes.tolist() if hasattr(self.genes, 'tolist') else self.genes
+        
+        # Find missing genes that need to be added
+        missing_genes = [gene for gene in reference_genes if gene not in current_genes]
+        
+        if missing_genes:
+            print(f"*** Adding {len(missing_genes)} missing genes with zero expression. ***")
+        
+        # Update each section's AnnData object
+        for section_name, section_obj in self.section.items():
+            # Save spatial information and other data before processing
+            saved_uns = section_obj.adata.uns.copy()
+            saved_obsm = section_obj.adata.obsm.copy()
+            saved_obs = section_obj.adata.obs.copy()
+            
+            if missing_genes:
+                # Create AnnData for missing genes with zero expression
+                n_obs = section_obj.adata.n_obs
+                if scipy.sparse.issparse(section_obj.adata.X):
+                    # If original data is sparse, create sparse matrix
+                    missing_data = scipy.sparse.csr_matrix((n_obs, len(missing_genes)))
+                else:
+                    # If original data is dense, create dense matrix
+                    missing_data = np.zeros((n_obs, len(missing_genes)), dtype=section_obj.adata.X.dtype)
+                
+                import anndata
+                missing_adata = anndata.AnnData(X=missing_data)
+                missing_adata.var_names = missing_genes
+                missing_adata.obs_names = section_obj.adata.obs_names
+                
+                # Concatenate the original data with the missing genes
+                section_obj.adata = anndata.concat([section_obj.adata, missing_adata], axis=1, merge='same')
+            
+            # Reorder genes according to reference gene list
+            section_obj.adata = section_obj.adata[:, reference_genes]
+            
+            # Restore the saved information
+            section_obj.adata.uns = saved_uns
+            section_obj.adata.obsm = saved_obsm
+            section_obj.adata.obs = saved_obs
+        
+        # Update global gene information
+        self.genes = reference_genes
+        self.num_genes = len(self.genes)
+        
+        # Update model parameters to match new gene dimensions
+        self.model.num_genes = self.num_genes
+        # Reinitialize nmf_decoder with new gene dimensions
+        self.model.nmf_decoder = torch.nn.Parameter(
+            torch.randn(self.num_genes, self.rank, device=self.device), 
+            requires_grad=True
+        )
+        
 
     def _process_data(self):
+        """
+        Process and harmonize data across sections.
+        
+        This method performs several key preprocessing steps:
+        1. For multi-section datasets, finds common genes across all sections
+        2. Adjusts split size if scale_split_size is enabled  
+        3. Divides tissue areas into sub-regions for processing
+        4. Creates pseudo spots for enhanced spatial modeling
+        5. Identifies nearby spots for both sequenced and all spots
+        
+        Notes
+        -----
+        The method modifies section objects in-place, adding tissue_coord,
+        all_spot_coord, nearby_spots, and all_nearby_spots attributes.
+        """
+        # Merge multiple sections
+        if len(self.section) > 1:
+            # 1. Calculate the intersection of genes (a more concise way)
+            list_of_gene_sets = [set(s.genes) for s in self.section.values()]
+            intersect_genes_set = reduce(lambda acc, gene_set: acc.intersection(gene_set), list_of_gene_sets) if list_of_gene_sets else set()
+            intersect_genes = sorted(list(intersect_genes_set))
+
+            if not intersect_genes:
+                raise ValueError("No common genes found across all sections. Please check your input data.")
+
+            # 2. Update the global gene information
+            self.genes = np.array(intersect_genes) # intersect_genes is sorted list
+            self.num_genes = len(self.genes)
+            if self.verbose:  print(f"*** Found {self.num_genes} common genes across all sections. ***")
+
+            # 3. Update each section's AnnData object
+            for section_obj in self.section.values():
+                section_obj.adata = section_obj.adata[:, self.genes].copy()
+        
+        else:
+            single_section = list(self.section.values())[0]
+            self.genes = single_section.genes
+            self.num_genes = len(self.genes)
+            if self.verbose: print(f"*** Single section detected. Using its {self.num_genes} genes. ***")
+            
         # Divide the tissue area into sub-tissue regions based on split size and redundancy ratio.
 
         # self.args.split_size = self.args.split_size // list(self.section.values())[0].scale_rate
-        self.args.split_size = int(self.args.split_size // math.sqrt(list(self.section.values())[0].scale_rate) // 16 * 16)
+        if self.scale_split_size:
+            self.args.split_size = int(self.args.split_size // math.sqrt(list(self.section.values())[0].scale_rate) // 16 * 16)
         print(f'*** The split size is set to {self.args.split_size} pixels. ***')
 
         for name, section in self.section.items():
@@ -180,7 +332,7 @@ class Mapper:
     def get_NMF_score(self,
                       save_score: bool = False):
         """
-        Perform NMF and normalize the results.
+        Perform NMF and normalize the results, or use existing metagene for transfer learning.
 
         Parameters
         ----------
@@ -191,12 +343,25 @@ class Mapper:
         # Prepare data
         spot_exp = np.vstack([self.section[section].spot_exp for section in self.section])
 
-        # Perform NMF
-        print('*** Performing NMF... ***')
+        # Check if metagene_NMF already exists (for transfer learning)
+        if hasattr(self, 'metagene_NMF') and self.metagene_NMF is not None:
+            print('*** Using existing metagene for transfer learning... ***')
+            
+            # Use existing metagene to calculate NMF scores via linear regression
+            from sklearn.linear_model import LinearRegression
+            reg_ls_factor = LinearRegression(fit_intercept=False, positive=True)
+            reg_res_factor = reg_ls_factor.fit(np.array(self.metagene_NMF), spot_exp.T)
+            NMF_score = reg_res_factor.coef_
+            # For transfer learning, metagene should have shape (rank, n_genes) to match standard NMF
+            metagene = self.metagene_NMF.values.T  # Transpose to match (rank, n_genes)
+            
+        else:
+            # Perform standard NMF
+            print('*** Performing NMF... ***')
 
-        model_NMF = NMF(n_components=self.rank, init='nndsvd', max_iter=2000)
-        NMF_score = model_NMF.fit_transform(spot_exp)
-        metagene = model_NMF.components_
+            model_NMF = NMF(n_components=self.rank, init='nndsvd', max_iter=2000)
+            NMF_score = model_NMF.fit_transform(spot_exp)
+            metagene = model_NMF.components_
 
         if self.reference is not None:
             self.model.gamma = self.model.gamma.to(self.device)
@@ -337,7 +502,20 @@ class Mapper:
             if save_model: torch.save(self.model.state_dict(), self.pretrain_path)
 
     def _prepare_pretrain(self):
-        # Prepare the pre-training process for the SpaHDmap model
+        """
+        Prepare the pre-training process for the SpaHDmap model.
+        
+        This method sets up the autoencoder pre-training by:
+        1. Setting model to training mode and enabling gradients
+        2. Initializing mixed precision scaler for efficiency
+        3. Creating training dataset and dataloader
+        4. Setting up MSE loss, Adam optimizer and cosine annealing scheduler
+        
+        Notes
+        -----
+        Pre-training uses image reconstruction task to learn meaningful 
+        feature representations before the main training phase.
+        """
 
         self.model.train()
         for name, p in self.model.named_parameters():
@@ -362,7 +540,20 @@ class Mapper:
         self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.args.total_iter_pretrain, eta_min=self.args.eta_min)
 
     def _pretrain_model(self):
-        # Prepare the pre-training process
+        """
+        Execute the pre-training process for the SpaHDmap model.
+        
+        This method performs autoencoder pre-training with:
+        1. Mixed precision training for efficiency
+        2. Progressive loss monitoring and early stopping
+        3. Cosine annealing learning rate scheduling
+        4. Convergence detection based on loss stabilization
+        
+        Notes
+        -----
+        Early stopping occurs if loss change is less than 5% after 
+        reaching halfway through training iterations.
+        """
         self._prepare_pretrain()
 
         # Start the pre-training process
@@ -477,7 +668,7 @@ class Mapper:
 
         img_size = radius * 2
         num_spots = spot_coord.shape[0]
-        sub_images = np.zeros((num_spots, self.args.num_channels, 2 * img_size + 1, 2 * img_size + 1), dtype=np.float32)
+        sub_images = np.zeros((num_spots, self.num_channels, 2 * img_size + 1, 2 * img_size + 1), dtype=np.float32)
 
         # Extract sub-image for each spot
         for spot_index in range(num_spots):
@@ -648,6 +839,72 @@ class Mapper:
         LR.fit(all_score, all_exp)
         self.metagene_GCN.loc[:, :] = LR.coef_
 
+    def _calculate_spot_score(self,
+                             score: np.ndarray,
+                             coords: np.ndarray,
+                             radius: float,
+                             quantile: float = 0.5) -> np.ndarray:
+        """
+        Calculate spot-wise score intensities from pixel-level data using circular masks.
+
+        Parameters
+        ----------
+        score : np.ndarray
+            Pixel-level score data with shape (n_components, height, width).
+        coords : np.ndarray  
+            Spot coordinates with shape (n_spots, 2) in (row, col) format.
+        radius : float
+            Radius for spot extraction in pixels.
+        quantile : float, optional (default=0.5)
+            Quantile value for aggregating pixel values within each spot region.
+            
+        Returns
+        -------
+        np.ndarray
+            Spot-wise scores with shape (n_spots, n_components).
+            
+        Notes
+        -----
+        This method extracts circular regions around each spot coordinate and 
+        aggregates pixel values using the specified quantile. Boundary handling
+        ensures proper extraction even for spots near image edges.
+        """
+        # Convert coordinates to integer type
+        coords_scaled = coords.astype(int)
+        radius_scaled = int(radius)
+        
+        # Generate circular mask for spots
+        y, x = np.ogrid[-radius_scaled:radius_scaled+1, -radius_scaled:radius_scaled+1]
+        circular_mask = x*x + y*y <= radius_scaled*radius_scaled
+        
+        spot_score = np.zeros((len(coords), score.shape[0]))
+        
+        for idx, (row, col) in enumerate(coords_scaled):
+            row_start = max(0, row - radius_scaled)
+            row_end = min(score.shape[1], row + radius_scaled + 1) 
+            col_start = max(0, col - radius_scaled)
+            col_end = min(score.shape[2], col + radius_scaled + 1)
+            
+            mask_row_start = max(0, radius_scaled - row)
+            mask_row_end = min(circular_mask.shape[0], mask_row_start + (row_end - row_start))
+            mask_col_start = max(0, radius_scaled - col)
+            mask_col_end = min(circular_mask.shape[1], mask_col_start + (col_end - col_start))
+            
+            # Extract appropriate portion of circular mask
+            spot_mask = circular_mask[mask_row_start:mask_row_end,
+                                    mask_col_start:mask_col_end]
+
+            for d in range(score.shape[0]):
+                spot_region = score[d, row_start:row_end, col_start:col_end]
+                # Make sure spot_region and spot_mask have same dimensions
+                if spot_region.shape == spot_mask.shape:
+                    values = spot_region[spot_mask]
+                    if len(values) > 0:
+                        spot_score[idx, d] = np.quantile(values, quantile)
+                
+        return spot_score
+
+
     def _smooth(self,
                 spot_score: np.ndarray,
                 kernel_size: int,
@@ -798,7 +1055,21 @@ class Mapper:
         self.metagene.to_csv(f'{self.results_path}/metagene.csv', index=True, header=True)
 
     def _train_model(self):
-        # Train the SpaHDmap model
+        """
+        Execute the main training process for the SpaHDmap model.
+        
+        This method performs joint training with:
+        1. Two-phase training strategy: fixed decoder then full parameter training
+        2. Multi-objective loss combining image reconstruction and expression prediction
+        3. Regularization term for score consistency  
+        4. Adaptive learning rates for different parameter groups
+        
+        Notes
+        -----
+        Training uses a dual-phase approach: first fixing the NMF decoder parameters
+        for stability, then allowing full parameter optimization with different
+        learning rates for decoder vs other parameters.
+        """
 
         self._prepare_train(load_decoder_params=True)
 
@@ -898,9 +1169,21 @@ class Mapper:
             # Get the SpaHDmap scores
             section.scores['SpaHDmap'] = self._extract_embedding(image, section.scores['VD'])
 
+            # Calculate SpaHDmap_spot scores
+            adjusted_coords = section.spot_coord.copy()
+            adjusted_coords[:, 0] -= section.row_range[0]  # Adjust row coordinates
+            adjusted_coords[:, 1] -= section.col_range[0]  # Adjust column coordinates
+            
+            section.scores['SpaHDmap_spot'] = self._calculate_spot_score(
+                score=section.scores['SpaHDmap'],
+                coords=adjusted_coords,
+                radius=section.radius
+            )
+
             if save_score:
                 os.makedirs(section.save_paths['SpaHDmap'], exist_ok=True)
                 np.save(f"{section.save_paths['SpaHDmap']}/SpaHDmap_score.npy", section.scores['SpaHDmap'])
+                np.save(f"{section.save_paths['SpaHDmap']}/SpaHDmap_spot_score.npy", section.scores['SpaHDmap_spot'])
 
             tmp_score = section.scores['SpaHDmap'] * 255
             tmp_score = tmp_score.astype(np.uint8)
@@ -971,27 +1254,116 @@ class Mapper:
         torch.cuda.empty_cache()
         return embeddings
 
+    def extract_spots(self,
+                      index: int,
+                      section: Optional[Union[str, STData, List[Union[str, STData]]]] = None,
+                      threshold: float = 0.05,
+                      use_score: str = 'SpaHDmap_spot'):
+        """
+        Extract spot indices with high score in a specific embedding.
+        
+        Parameters
+        ----------
+        index : int
+            The embedding index to extract from (0-based)
+        section : str, STData, list or None
+            Section(s) to extract from. If None, uses all sections in Mapper.
+        threshold : float
+            Threshold value, spots above this value will be extracted, defaults to 0.05
+        use_score : str  
+            The score type to use, defaults to 'SpaHDmap_spot'
+            
+        Returns
+        -------
+        numpy.ndarray or dict
+            If single section: returns barcodes array directly
+            If multiple sections: returns dictionary {section_name: barcodes}
+        """
+        
+        # Validate embedding index
+        if index < 0 or index >= self.rank:
+            raise ValueError(f"Embedding index {index} out of range [0, {self.rank-1}]")
+        
+        # Process section parameter
+        if section is None:
+            sections_to_process = self.section
+        elif isinstance(section, str):
+            if section not in self.section:
+                raise ValueError(f"Section '{section}' not found in mapper")
+            sections_to_process = {section: self.section[section]}
+        elif hasattr(section, 'section_name'):  # STData object
+            sections_to_process = {section.section_name: section}
+        elif isinstance(section, list):
+            sections_to_process = {}
+            for s in section:
+                if isinstance(s, str):
+                    if s not in self.section:
+                        raise ValueError(f"Section '{s}' not found in mapper")
+                    sections_to_process[s] = self.section[s]
+                elif hasattr(s, 'section_name'):  # STData object
+                    sections_to_process[s.section_name] = s
+                else:
+                    raise ValueError(f"Invalid section type: {type(s)}")
+        else:
+            raise ValueError(f"Invalid section parameter type: {type(section)}")
+        
+        results = {}
+        
+        for section_name, section_obj in sections_to_process.items():
+            if self.verbose:
+                print(f"*** Extracting high-score spots for Embedding_{index} in section {section_name}... ***")
+                
+            # Check if the score is available
+            if use_score not in section_obj.scores or section_obj.scores[use_score] is None:
+                print(f"Warning: {use_score} score not found for section {section_name}, skipping...")
+                continue
+                
+            # Get spot scores for the specified embedding
+            spot_scores = section_obj.scores[use_score][:, index]
+            
+            # Find spot indices above threshold
+            high_score_indices = np.where(spot_scores > threshold)[0]
+            
+            # Get corresponding barcodes
+            barcodes = section_obj.adata.obs.index[high_score_indices].values
+            
+            # Store results
+            results[section_name] = barcodes
+            
+            if self.verbose:
+                print(f"Found {len(high_score_indices)} spots (out of {len(spot_scores)}, "
+                      f"{len(high_score_indices)/len(spot_scores)*100:.2f}%) above threshold {threshold}")
+        
+        # Return format based on number of sections
+        if len(results) == 1:
+            return list(results.values())[0]  # Return barcodes array directly
+        else:
+            return results  # Return dictionary
+
     def cluster(self,
                 section: Union[str, STData, List[Union[str, STData]]] = None,
                 use_score: str = 'SpaHDmap',
                 resolution: float = 0.8,
                 n_neighbors: int = 50,
+                format: str = 'png',
                 show: bool = True):
         """
         Perform clustering on sections.
 
         Parameters
         ----------
-        section : str | STData | list
-            Section(s) to cluster. If None, uses all sections
-        use_score : str
-            Score type to use for clustering
-        resolution : float
-            Resolution parameter for Louvain clustering
-        n_neighbors : int
-            Number of neighbors for graph construction
-        show : bool
-            Whether to display the plot using plt.show(). Defaults to True.
+        section : str | STData | list, optional (default=None)
+            Section(s) to cluster. If None, uses all sections.
+        use_score : str, optional (default='SpaHDmap')
+            Score type to use for clustering.
+        resolution : float, optional (default=0.8)
+            Resolution parameter for Louvain clustering.
+        n_neighbors : int, optional (default=50)
+            Number of neighbors for graph construction.
+        format : str, optional (default='png')
+            Output format for visualization ('jpg', 'png', 'pdf').
+        show : bool, optional (default=True)
+            Whether to display the plot using plt.show().
         """
         if section is None:
             section = list(self.section.values())
@@ -1011,7 +1383,7 @@ class Mapper:
         )
 
         if show:
-            self.visualize(section=section, use_score=use_score, target='cluster', show=show)
+            self.visualize(section=section, use_score=use_score, target='cluster', format=format, show=show)
 
     def recovery(self,
                  gene: Optional[Union[str, List[str]]],
@@ -1097,6 +1469,8 @@ class Mapper:
                   target: str = 'score',
                   gene: str = None,
                   index: int = None,
+                  format: str = 'png',
+                  crop: bool = True,
                   show: bool = True):
         """
         Visualize scores, clustering results, or gene expression.
@@ -1113,6 +1487,10 @@ class Mapper:
             Gene name to visualize when target='gene'
         index : int
             For score visualization only - the index of embedding to show. Defaults to None
+        format : str
+            Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
+        crop : bool
+            Whether to crop to mask region. If False, save full image size. Defaults to True.
         show : bool
             Whether to display the plot using plt.show(). Defaults to True
         """
@@ -1141,15 +1519,17 @@ class Mapper:
             raise ValueError("Target must be 'score', 'cluster', or 'gene'.")
 
         # Call appropriate visualization function
+        if gene is not None: target = 'gene'
+
         if target == 'score':
             if index is not None:
                 assert 0 <= index < self.rank, f"Index must be less than rank ({self.rank})"
             assert section[0].scores[use_score] is not None, f"Score {use_score} not available"
-            visualize_score(section=section, use_score=use_score, index=index, verbose=self.verbose)
+            visualize_score(section=section, use_score=use_score, index=index, format=format, crop=crop, verbose=self.verbose)
 
         elif target == 'cluster':
             assert section[0].clusters[use_score] is not None, f"Clustering for {use_score} not available"
-            visualize_cluster(section=section, use_score=use_score, show=show, verbose=self.verbose)
+            visualize_cluster(section=section, use_score=use_score, format=format, show=show, verbose=self.verbose)
 
         elif target == 'gene':
             assert gene is not None, "Must specify gene name to visualize"
@@ -1159,7 +1539,7 @@ class Mapper:
             if not hasattr(section[0], 'X') or gene not in section[0].X:
                 self.recovery(gene=gene, section=section, use_score=use_score)
             
-            visualize_gene(section=section, gene=gene, use_score=use_score, show=show, verbose=self.verbose)
+            visualize_gene(section=section, gene=gene, use_score=use_score, format=format, crop=crop, show=show, verbose=self.verbose)
 
         else:
             raise ValueError("Target must be 'score', 'cluster', or 'gene'")
@@ -1168,30 +1548,111 @@ class Mapper:
                      save_score: bool = False,
                      save_model: bool = True,
                      load_model: bool = True,
-                     visualize: bool = True):
+                     visualize: bool = True,
+                     format: str = 'png',
+                     repeat_times: int = 1):
+        """
+        Run the complete SpaHDmap pipeline.
+        
+        Parameters
+        ----------
+        save_score : bool, optional
+            Whether to save computed scores as numpy arrays. Defaults to False.
+        save_model : bool, optional
+            Whether to save model checkpoints. Defaults to True.
+        load_model : bool, optional
+            Whether to load existing model checkpoints if available. Defaults to True.
+        visualize : bool, optional
+            Whether to generate and save visualizations. Defaults to True.
+        format : str, optional
+            Output format for visualizations ('jpg', 'png', 'pdf'). Defaults to 'png'.
+        repeat_times : int, optional
+            Number of times to repeat the pipeline with different random initializations. Defaults to 1.
+        """
 
-        # Get the NMF score
-        print('Step 1: Run NMF')
-        self.get_NMF_score(save_score=save_score)
-        if visualize: self.visualize(use_score='NMF')
+        # If only run once, use the original logic
+        if repeat_times == 1:
+            # Get the NMF score
+            print('Step 1: Run NMF')
+            self.get_NMF_score(save_score=save_score)
+            if visualize: self.visualize(use_score='NMF', format=format)
 
-        # Pre-train the SpaHDmap model
-        print('Step 2: Pre-train the SpaHDmap model')
-        self.pretrain(save_model=save_model, load_model=load_model)
+            # Pre-train the SpaHDmap model
+            print('Step 2: Pre-train the SpaHDmap model')
+            self.pretrain(save_model=save_model, load_model=load_model)
 
-        # Get the GCN score
-        print('Step 3: Train the GCN model')
-        self.get_GCN_score(save_score=save_score)
-        if visualize: self.visualize(use_score='GCN')
+            # Get the GCN score
+            print('Step 3: Train the GCN model')
+            self.get_GCN_score(save_score=save_score)
+            if visualize: self.visualize(use_score='GCN', format=format)
 
-        # Get the VD score
-        print('Step 4: Run Voronoi Diagram')
-        self.get_VD_score(use_score='GCN')
+            # Get the VD score
+            print('Step 4: Run Voronoi Diagram')
+            self.get_VD_score(use_score='GCN')
 
-        # Train the SpaHDmap model
-        print('Step 5: Train the SpaHDmap model')
-        self.train(save_model=save_model, load_model=load_model)
+            # Train the SpaHDmap model
+            print('Step 5: Train the SpaHDmap model')
+            self.train(save_model=save_model, load_model=load_model)
 
-        # Get the SpaHDmap score
-        self.get_SpaHDmap_score(save_score=save_score)
-        if visualize: self.visualize(use_score='SpaHDmap')
+            # Get the SpaHDmap score
+            self.get_SpaHDmap_score(save_score=save_score)
+            if visualize: self.visualize(use_score='SpaHDmap', format=format)
+        
+        else:
+            # Run multiple times, each time using different initialization
+            # First run NMF, subsequent runs do not need to be re-run
+            print('Step 1: Run NMF')
+            self.get_NMF_score(save_score=save_score)
+            if visualize: self.visualize(use_score='NMF', format=format)
+            
+            # Save the original save paths
+            original_save_paths = {}
+            for section_name, section in self.section.items():
+                original_save_paths[section_name] = {
+                    'SpaHDmap': section.save_paths['SpaHDmap'],
+                    'GCN': section.save_paths['GCN']
+                }
+            
+            for i in range(repeat_times):
+                print(f'*** Start the {i+1}th run of {repeat_times} runs ***')
+                
+                # Modify the save path, add suffix
+                for section_name, section in self.section.items():
+                    section.save_paths['SpaHDmap'] = original_save_paths[section_name]['SpaHDmap'] + f'_{i}'
+                    section.save_paths['GCN'] = original_save_paths[section_name]['GCN'] + f'_{i}'
+                
+                # Re-initialize the model
+                self.model = SpaHDmapUnet(rank=self.rank, num_genes=self.num_genes,
+                                  num_channels=self.num_channels, reference=self.reference)
+                self.model.to(self.device)
+                
+                # Pre-train the SpaHDmap model
+                print(f'Step 2-{i+1}: Pre-train the SpaHDmap model')
+                self.pretrain(save_model=save_model, load_model=False)
+
+                # Get the GCN score
+                print(f'Step 3-{i+1}: Train the GCN model')
+                self.get_GCN_score(save_score=save_score)
+                if visualize: self.visualize(use_score='GCN', format=format)
+
+                # Get the VD score
+                print(f'Step 4-{i+1}: Run Voronoi Diagram')
+                self.get_VD_score(use_score='GCN')
+
+                # Train the SpaHDmap model
+                print(f'Step 5-{i+1}: Train the SpaHDmap model')
+                self.train(save_model=save_model, load_model=False)
+
+                # Get the SpaHDmap score
+                self.get_SpaHDmap_score(save_score=save_score)
+                if visualize: self.visualize(use_score='SpaHDmap', format=format)
+                
+                # Save the current metagene
+                self.metagene.to_csv(f'{self.results_path}/metagene_{i}.csv', index=True, header=True)
+                
+                print(f'*** Finish the {i+1}th run of {repeat_times} runs ***')
+            
+            # Restore the original save paths
+            for section_name, section in self.section.items():
+                section.save_paths['SpaHDmap'] = original_save_paths[section_name]['SpaHDmap']
+                section.save_paths['GCN'] = original_save_paths[section_name]['GCN']

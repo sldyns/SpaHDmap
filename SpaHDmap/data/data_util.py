@@ -14,6 +14,7 @@ import pickle
 import os
 from .sparkx import sparkx
 from .bsp import bsp
+from .color_normalize import color_normalize
 
 class STData:
     """
@@ -36,19 +37,29 @@ class STData:
         Whether to swap the x and y coordinates. Defaults to True.
     create_mask : bool
         Whether to create a mask for the image. Defaults to True.
+    image_type : Optional[str]
+        Type of the image ('HE' or 'Immunofluorescence'). If None, will be auto-detected.
+    color_normalize : bool
+        Whether to apply Reinhard color normalization. Only works for H&E images. Defaults to False.
+    gene_list : Optional[List[str]]
+        List of genes to arrange the data by. If provided, select_hvgs will be set to False.
+        Missing genes will be added with zero expression. Defaults to None.
     """
 
     def __init__(self,
                  adata: anndata.AnnData,
+                 select_hvgs: bool,
                  section_name: str,
                  scale_rate: float,
                  radius: float,
                  swap_coord: bool = True,
                  create_mask: bool = True,
-                 image_type: Optional[str] = None):
+                 image_type: Optional[str] = None,
+                 color_norm: bool = False,
+                 gene_list: Optional[List[str]] = None):
 
         # Process the AnnData object
-        self.adata = preprocess_adata(adata, swap_coord)
+        self.adata = preprocess_adata(adata, select_hvgs, swap_coord, gene_list)
 
         # Extract image and spot coordinates
         image = adata.uns['spatial'][list(adata.uns['spatial'].keys())[0]]['images']['orires'].copy()
@@ -64,13 +75,13 @@ class STData:
 
         # Initialize the scores and save_paths dictionaries
         self.save_paths = None
-        self.scores = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None}
-        self.clusters = {'NMF': None, 'GCN': None, 'SpaHDmap': None}
+        self.scores = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None, 'SpaHDmap_spot': None}
+        self.clusters = {'NMF': None, 'SpaHDmap': None}
         self.tissue_coord = None
         self.X = {}
 
         # Preprocess the image and spot expression data
-        self._preprocess(spot_coord, image, create_mask, image_type)
+        self._preprocess(spot_coord, image, create_mask, image_type, color_norm)
 
     @property
     def spot_exp(self):
@@ -156,7 +167,8 @@ class STData:
                      spot_coord: np.ndarray,
                      image: np.ndarray,
                      create_mask: bool,
-                     image_type: str):
+                     image_type: str,
+                     color_norm: bool):
         """
         Preprocess spot_coord and prepare the feasible domain and process the image.
 
@@ -168,6 +180,10 @@ class STData:
             Original image data.
         create_mask : bool
             Whether to create a mask for the image.
+        image_type : str
+            Type of the image ('HE' or 'Immunofluorescence').
+        color_norm : bool
+            Whether to apply Reinhard color normalization.
         """
 
         # Process the spot coordinates
@@ -237,6 +253,19 @@ class STData:
             self.mask = mask = np.ones(hires_shape, dtype=np.bool_)
             self.row_range = (0, hires_shape[0])
             self.col_range = (0, hires_shape[1])
+
+        # Apply color normalization after mask creation
+        if color_norm and self.image_type == 'HE':
+            print("Applying Reinhard color normalization...")
+            # Convert image back to (H, W, C) format for color normalization
+            rgb_image = np.transpose(self.image, (1, 2, 0)) * 255.0
+            rgb_image = rgb_image.astype(np.uint8)
+            # Apply Reinhard normalization using the mask
+            cnorm_image = color_normalize(rgb_image, mask)
+            # Convert back to (C, H, W) format
+            self.image = np.transpose(cnorm_image, (2, 0, 1))
+        elif color_norm and self.image_type != 'HE':
+            print(f"Color normalization is only supported for H&E images, skipping for {self.image_type} image.")
 
         # Create feasible domain
         self.feasible_domain = mask.copy()
@@ -343,7 +372,9 @@ def read_from_image_and_coord(image_path: str,
     return image, spot_coord, spot_exp
 
 def preprocess_adata(adata: anndata.AnnData,
-                     swap_coord: bool = True) -> anndata.AnnData:
+                     select_hvgs: bool = True,
+                     swap_coord: bool = True,
+                     gene_list: Optional[List[str]] = None) -> anndata.AnnData:
     """
     Preprocess the spatial transcriptomics data, including normalization and SVG selection using squidpy.
 
@@ -351,8 +382,13 @@ def preprocess_adata(adata: anndata.AnnData,
     ----------
     adata : anndata.AnnData
         AnnData object containing the spatial transcriptomics data.
+    select_hvgs : bool
+        Whether to select highly variable genes (HVGs). Defaults to True.
     swap_coord : bool
         Whether to swap the x and y coordinates. Defaults to True.
+    gene_list : Optional[List[str]]
+        List of genes to arrange the data by. If provided, select_hvgs will be set to False.
+        Missing genes will be added with zero expression. Defaults to None.
 
     Returns
     -------
@@ -371,7 +407,7 @@ def preprocess_adata(adata: anndata.AnnData,
 
     # Normalize data
     if adata.X.max() < 20:
-        warnings.warn("Data seems to be already normalized, skipping normalization.")
+        warnings.warn("Data seems to be already normalized, skipping pre-processing.")
     else:
         adata.var_names_make_unique()
         sc.pp.filter_cells(adata, min_genes=3)
@@ -379,18 +415,66 @@ def preprocess_adata(adata: anndata.AnnData,
         sc.pp.normalize_total(adata, target_sum=1e4)
         sc.pp.log1p(adata)
 
-    sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=10000, subset=True)
+    # Handle gene_list arrangement before select_hvgs
+    if gene_list is not None:
+        print(f"Arranging genes according to provided gene list with {len(gene_list)} genes.")
+        select_hvgs = False  # Override select_hvgs when gene_list is provided
+        
+        # Save spatial information and other uns data before processing
+        saved_uns = adata.uns.copy()
+        saved_obsm = adata.obsm.copy()
+        saved_obs = adata.obs.copy()
+        
+        # Get current genes
+        current_genes = adata.var_names.tolist()
+        missing_genes = [gene for gene in gene_list if gene not in current_genes]
+        
+        if missing_genes:
+            print(f"Adding {len(missing_genes)} missing genes with zero expression.")
+            
+            # Create a new AnnData object with missing genes (all zeros)
+            # Match the data format (sparse or dense) of the original adata
+            n_obs = adata.n_obs
+            if scipy.sparse.issparse(adata.X):
+                # If original data is sparse, create sparse matrix
+                missing_data = scipy.sparse.csr_matrix((n_obs, len(missing_genes)))
+            else:
+                # If original data is dense, create dense matrix
+                missing_data = np.zeros((n_obs, len(missing_genes)), dtype=adata.X.dtype)
+            
+            missing_adata = anndata.AnnData(X=missing_data)
+            missing_adata.var_names = missing_genes
+            missing_adata.obs_names = adata.obs_names
+            
+            # Concatenate the original data with the missing genes
+            adata = anndata.concat([adata, missing_adata], axis=1, merge='same')
+        
+        # Reorder genes according to gene_list
+        adata = adata[:, gene_list]
+        
+        # Restore the saved information
+        adata.uns = saved_uns
+        adata.obsm = saved_obsm
+        adata.obs = saved_obs
+        
+        print(f"Data rearranged to match gene list order with {adata.shape[1]} genes.")
+
+    if select_hvgs: sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=10000, subset=True)
+
     return adata
 
 def prepare_stdata(section_name: str = None,
                    st_path: Optional[str] = None,
                    image_path: Optional[str] = None,
                    adata: Optional[sc.AnnData] = None,
+                   select_hvgs: bool = True,
                    scale_rate: float = 1,
                    radius: float = None,
                    swap_coord: bool = True,
                    create_mask: bool = True,
                    image_type: Optional[str] = None,
+                   color_norm: bool = False,
+                   gene_list: Optional[List[str]] = None,
                    **kwargs):
     """
     Prepare STData object from various data sources with priority.
@@ -413,6 +497,13 @@ def prepare_stdata(section_name: str = None,
         Whether to swap the x and y coordinates. Defaults to True.
     create_mask : bool
         Whether to create a mask for the image. Defaults to True.
+    image_type : Optional[str]
+        Type of the image ('HE' or 'Immunofluorescence'). If None, will be auto-detected.
+    color_norm : bool
+        Whether to apply Reinhard color normalization. Only works for H&E images. Defaults to False.
+    gene_list : Optional[List[str]]
+        List of genes to arrange the data by. If provided, select_hvgs will be set to False.
+        Missing genes will be added with zero expression. Defaults to None.
     **kwargs : Additional keyword arguments, including visium_path, spot_coord_path, and spot_exp_path.
     visium_path : str
         Path to the 10x Visium data directory.
@@ -442,9 +533,6 @@ def prepare_stdata(section_name: str = None,
     # Check if image_path is provided when needed
     if image_path is None:
         raise ValueError("image_path is required when st_path is not provided or loading fails")
-
-    if section_name is None:
-        raise ValueError("section_name is required when creating new STData object")
 
     # Check for AnnData
     if adata is not None:
@@ -503,12 +591,15 @@ def prepare_stdata(section_name: str = None,
 
     # Create STData object
     st_data = STData(adata,
+                     select_hvgs=select_hvgs,
                      section_name=section_name,
                      scale_rate=scale_rate,
                      radius=radius,
                      swap_coord=swap_coord,
                      create_mask=create_mask,
-                     image_type=image_type)
+                     image_type=image_type,
+                     color_norm=color_norm,
+                     gene_list=gene_list)
     return st_data
 
 
