@@ -1,0 +1,16 @@
+{
+    "settings": {
+        "root_path": "experiments",
+        "project": "MPBS01"
+    },
+    "sections": [
+        {
+            "name": "mouse_posterior",
+            "id": "V1_Mouse_Brain_Sagittal_Posterior"
+        }
+    ],
+    "paras": {
+        "scale_rate": 1,
+        "radius": 45
+    }
+}

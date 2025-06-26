@@ -70,3 +70,55 @@ This advanced tutorial covers:
 - Configuring SpaHDmap for multiple sections
 - Running the analysis across sections
 - Visualizing and comparing results from different sections
+
+## Rank Selection Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+Rank-selection
+```
+
+This tutorial covers:
+
+- Using cophenetic correlation to determine optimal rank
+- Applying the selected rank in SpaHDmap analysis
+
+## Model Transfer Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+Model-transfer
+```
+
+This tutorial covers:
+
+- Loading pre-trained SpaHDmap models and new dataset
+- Getting SpaHDmap score using pre-trained models
+
+## Spatial Domain Refinement Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+Domain-refinement
+```
+
+This tutorial covers:
+
+- Extracting high-score spots from region of interest
+- Re-running SpaHDmap on refined spatial domains
+
+## Color Normalization Tutorial
+
+```{toctree}
+:maxdepth: 1
+
+Color-normalization
+```
+
+This tutorial covers:
+
+- Applying color normalization to multi-section data
+- Running the analysis across sections

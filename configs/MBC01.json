@@ -1,0 +1,16 @@
+{
+    "settings": {
+        "root_path": "experiments",
+        "project": "MBC01"
+    },
+    "sections": [
+        {
+            "name": "mouse_cortex",
+            "id": "V1_Adult_Mouse_Brain_Coronal_Section_2"
+        }
+    ],
+    "paras": {
+        "scale_rate": 1,
+        "radius": 89
+    }
+}

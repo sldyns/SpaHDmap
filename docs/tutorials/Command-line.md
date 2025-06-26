@@ -102,8 +102,8 @@ For multi-sections data, the JSON file should be like this:
 ```
 
 The example JSON files for previous tutorials are as follows:
-- [HE-imaged ST](https://github.com/sldyns/SpaHDmap/blob/main/configs/MPB_HE_Section1.json)
-- [IHC-imaged ST](https://github.com/sldyns/SpaHDmap/blob/main/configs/MBC_IHC_Section2.json)
+- [HE-imaged ST](https://github.com/sldyns/SpaHDmap/blob/main/configs/MPBS01.json)
+- [IHC-imaged ST](https://github.com/sldyns/SpaHDmap/blob/main/configs/MBC01.json)
 - [Multi-sections data](https://github.com/sldyns/SpaHDmap/blob/main/configs/Medulloblastoma.json)
 
 ## 2. Run SpaHDmap
