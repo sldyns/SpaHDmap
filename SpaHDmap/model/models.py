@@ -16,11 +16,11 @@ def conv_down(in_chn, out_chn, bias=False):
 
     Parameters
     ----------
-        in_chn: int
+        in_chn
             Number of input channels.
-        out_chn: int
+        out_chn
             Number of output channels.
-        bias: bool
+        bias
             Whether to include a bias term. Default to False.
 
     Returns
@@ -39,15 +39,15 @@ class UNetConvBlock(nn.Module):
 
     Parameters
     ----------
-        in_size: int
+        in_size
             Number of input channels.
-        out_size: int
+        out_size
             Number of output channels.
-        downsample: bool
+        downsample
             Whether to include a downsampling layer.
-        relu_slope: float
+        relu_slope
             Slope for the LeakyReLU activation.
-        use_HIN: bool
+        use_HIN
             Whether to use Half Instance Normalization. Default to False.
     """
 
@@ -78,11 +78,11 @@ class UNetConvBlock(nn.Module):
 
         Parameters
         ----------
-            x: torch.Tensor
+            x
                 Input tensor.
-            enc: torch.Tensor
+            enc
                 Tensor from the corresponding downsampling block.
-            dec: torch.Tensor
+            dec
                 Tensor from the corresponding upsampling block.
 
         Returns
@@ -115,11 +115,11 @@ class UNetUpBlock(nn.Module):
 
     Parameters
     ----------
-        in_size: int
+        in_size
             Number of input channels.
-        out_size: int
+        out_size
             Number of output channels.
-        relu_slope: float
+        relu_slope
             Slope for the LeakyReLU activation.
     """
 
@@ -138,9 +138,9 @@ class UNetUpBlock(nn.Module):
 
         Parameters
         ----------
-            x: torch.Tensor
+            x
                 Input tensor.
-            bridge: torch.Tensor
+            bridge
                 Tensor from the corresponding downsampling block.
 
         Returns
@@ -163,13 +163,13 @@ class SpaHDmapUnet(nn.Module):
 
     Parameters
     ----------
-        rank: int
+        rank
             The rank of the low-rank representation. Defaults to 20.
-        num_genes: int
+        num_genes
             The number of genes in the dataset. Defaults to 2000.
-        num_channels: int
+        num_channels
             The number of channels in the input image. Defaults to 3.
-        reference: dict
+        reference
             Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}. Only used for multi-section analysis. Defaults to None.
 
     Example
@@ -248,24 +248,24 @@ class SpaHDmapUnet(nn.Module):
 
         Parameters
         ----------
-            image: torch.Tensor
+            image
                 Input image tensor.
-            section_name: str
+            section_name
                 Section name for batch effect removal. Default to None.
-            feasible_coord: dict
+            feasible_coord
                 Dictionary of feasible coordinates. Default to None.
-            vd_score: torch.Tensor
+            vd_score
                 Input tensor representing the sequenced spot embeddings. Default to None.
-            encode_only: bool
+            encode_only
                 Whether to only perform encoding. Default to False.
 
         Returns
         -------
-            image_pred: torch.Tensor
+            image_pred
                 Predicted image.
-            spot_exp_pred: torch.Tensor
+            spot_exp_pred
                 Predicted spot expression (if feasible coordinates are provided).
-            HR_score: torch.Tensor
+            HR_score
                 High-resolution pixel-wise embedding output.
         """
 
@@ -324,9 +324,9 @@ class GraphConv(nn.Module):
 
     Parameters
     ----------
-        input_dim: int
+        input_dim
             The input dimension of the graph convolutional layer.
-        output_dim: int
+        output_dim
             The output dimension of the graph convolutional layer.
 
     Returns
@@ -355,11 +355,11 @@ class GraphAutoEncoder(nn.Module):
 
     Parameters
     ----------
-        adj_matrix: torch.Tensor
+        adj_matrix
             The adjacency matrix of the graph.
-        num_spots: int
+        num_spots
             The number of spots in the dataset.
-        rank: int
+        rank
             The rank of the graph autoencoder. Defaults to 20.
             
     Example
@@ -400,12 +400,12 @@ class GraphAutoEncoder(nn.Module):
 
         Parameters
         ----------
-            score: torch.Tensor
+            score
                 Input tensor representing the sequenced spot embeddings.
 
         Returns
         -------
-            y: torch.Tensor
+            y
                 Reconstructed spot embedding whose values are limited to [0, 1].
         """
         # Apply sigmoid to latent strengths to limit their values

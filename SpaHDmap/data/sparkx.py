@@ -13,17 +13,17 @@ def integrand(t, q, lda):
     """
     Integrand function used in the characteristic function inversion.
 
-    Parameters:
-    -----------
-    t : float
+    Parameters
+    ----------
+    t
         The integration variable.
-    q : float
+    q
         Quantile value at which to calculate the CDF.
-    lambdas : np.ndarray
+    lambdas
         Eigenvalues of the quadratic form.
 
-    Returns:
-    --------
+    Returns
+    -------
     float
         The imaginary part of the characteristic function over t.
     """
@@ -35,19 +35,19 @@ def davies(q, lda, lim=3000, acc=1e-4):
     """
     Calculate the CDF of a quadratic form of normal variables using characteristic function inversion.
 
-    Parameters:
-    -----------
-    q : float
+    Parameters
+    ----------
+    q
         The value at which to calculate the CDF.
-    lambdas : array-like
+    lambdas
         Eigenvalues of the quadratic form.
-    lim : int, optional
+    lim
         Upper limit for integration. Default is 10000.
-    acc : float, optional
+    acc
         Desired accuracy for integration. Default is 1e-4.
 
-    Returns:
-    --------
+    Returns
+    -------
     dict
         A dictionary containing:
         - 'trace': None in this implementation.
@@ -68,15 +68,15 @@ def liu(q, lda):
     """
     Liu's method for approximating the distribution of a weighted sum of chi-squared variables.
 
-    Parameters:
-    -----------
-    q : float
+    Parameters
+    ----------
+    q
         The quantile point.
-    lambdas : array-like
+    lambdas
         The weights (eigenvalues) of the chi-squared variables.
 
-    Returns:
-    --------
+    Returns
+    -------
     float
         The approximate probability P(Q > q).
     """
@@ -117,19 +117,19 @@ def sparkx(counts: Union[np.ndarray, sparse.spmatrix, List],
     """
     The main function that tests multiple kernels with non-parametric framework
 
-    Parameters:
-    -----------
-    counts : Union[np.ndarray, sparse.spmatrix, List]
+    Parameters
+    ----------
+    counts
         A n x p gene expression matrix (sparseMatrix)
-    location : np.ndarray
+    location
         A n x d location matrix
-    num_cores : int, optional
+    num_cores
         An integer specifying multiple threads
-    option : str, optional
+    option
         A description of kernels to be tested, "single" or "mixture"
 
-    Returns:
-    --------
+    Returns
+    -------
     np.ndarray
         Combined p-value for all kernels.
     """
@@ -161,17 +161,17 @@ def sparkx_sk(counts: np.ndarray,
     """
     Testing for single kernel with non-parametric framework
 
-    Parameters:
-    -----------
-    counts : np.ndarray
+    Parameters
+    ----------
+    counts
         A n x p gene expression matrix
-    infomat : np.ndarray
+    infomat
         A n x d location matrix
-    mc_cores : int, optional
+    mc_cores
         An integer specifying multiple threads
 
-    Returns:
-    --------
+    Returns
+    -------
     np.ndarray
         P-values for all genes.
     """
@@ -206,17 +206,17 @@ def sparkx_pval(igene: int,
     """
     Calculate SPARK-X P-values
 
-    Parameters:
-    -----------
-    igene : int
+    Parameters
+    ----------
+    igene
         A gene index
-    lambda_G : np.ndarray
+    lambda_G
         A p-vector of eigen values for all genes
-    allstat : np.ndarray
+    allstat
         A p-vector of test statistics for all genes
 
-    Returns:
-    --------
+    Returns
+    -------
     float
         A p value
     """
@@ -231,17 +231,17 @@ def transloc(coord: np.ndarray, lker: int, transfunc: str = "gaussian") -> np.nd
     """
     Transforming the coordinate
 
-    Parameters:
-    -----------
-    coord : np.ndarray
+    Parameters
+    ----------
+    coord
         A n-vector of coordinate
-    lker : int
+    lker
         An index of smoothing or periodic parameter
-    transfunc : str, optional
+    transfunc
         A description of coordinate transform function
 
-    Returns:
-    --------
+    Returns
+    -------
     np.ndarray
         Transformed coordinates
     """
@@ -259,15 +259,15 @@ def ACAT(Pvals: np.ndarray, Weights: Optional[np.ndarray] = None) -> float:
     """
     Combining P values for all kernels (Vector-Based)
 
-    Parameters:
-    -----------
-    Pvals : np.ndarray
+    Parameters
+    ----------
+    Pvals
         A vector of p values for all kernels
-    Weights : Optional[np.ndarray], optional
+    Weights
         A vector of weights for all kernels
 
-    Returns:
-    --------
+    Returns
+    -------
     float
         Combined p-value
     """
@@ -288,4 +288,3 @@ def ACAT(Pvals: np.ndarray, Weights: Optional[np.ndarray] = None) -> float:
     else:
         pval = 1 - cauchy.cdf(cct_stat)
     return pval
-

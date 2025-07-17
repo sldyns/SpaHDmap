@@ -30,7 +30,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx_copybutton",
     "nbsphinx",
-    'myst_parser',
+    "myst_parser",
 ]
 
 intersphinx_mapping = {

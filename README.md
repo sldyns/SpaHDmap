@@ -25,7 +25,7 @@ pip install SpaHDmap
 Or clone this repository and use
 
 ```bash
-pip install -e .
+pip install .
 ```
 
 in the root of this repository.
@@ -35,6 +35,7 @@ in the root of this repository.
 Please refer to the [documentation](https://spahdmap.readthedocs.io/en/latest/) for more details, for examples:
 - to get the detailed information about installation, please refer to the [installation guide](https://spahdmap.readthedocs.io/en/latest/installation.html).
 - to get started with SpaHDmap, please refer to the [tutorials](https://spahdmap.readthedocs.io/en/latest/tutorials/index.html).
+- to download the example data, please refer to the [Google Drive](https://drive.google.com/drive/folders/16L1nm3TzDDTFPVAaRXVKRp4LuCqvXbt2)
 
 ## License
 This software package is licensed under MIT license. For commercial use, please contact [Ruibin Xi](ruibinxi@math.pku.edu.cn).

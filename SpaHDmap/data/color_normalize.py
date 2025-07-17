@@ -34,12 +34,12 @@ def rgb_to_lab(im_rgb):
 
     Parameters
     ----------
-    im_rgb : array_like
+    im_rgb
         An RGB image
 
     Returns
     -------
-    im_lab : array_like
+    im_lab
         LAB representation of the input image `im_rgb`.
 
     See Also
@@ -76,12 +76,12 @@ def lab_to_rgb(im_lab):
 
     Parameters
     ----------
-    im_lab : array_like
+    im_lab
         An image in LAB color space
 
     Returns
     -------
-    im_rgb : array_like
+    im_rgb
         The RGB representation of the input image 'im_lab'.
 
     See Also
@@ -122,19 +122,15 @@ def reinhard(im_src: np.ndarray,
     """
     Perform Reinhard color normalization on an RGB image.
     
-    This method normalizes the color distribution of an image by matching
-    the mean and standard deviation of its LAB color space representation
-    to target values.
-    
     Parameters
     ----------
-    im_src : np.ndarray
+    im_src
         Source RGB image with values in range [0, 1] and shape (H, W, 3)
-    target_mu : np.ndarray
+    target_mu
         Target mean values for L, A, B channels (shape: 3)
-    target_sigma : np.ndarray
+    target_sigma
         Target standard deviation values for L, A, B channels (shape: 3)
-    mask_out : np.ndarray, optional
+    mask_out
         Boolean mask indicating pixels to exclude from statistics calculation.
         True values are excluded. Shape should match (H, W).
         
@@ -188,9 +184,9 @@ def color_normalize(image: np.ndarray,
     
     Parameters
     ----------
-    image : np.ndarray
+    image
         Input RGB image with values in range [0, 1] and shape (H, W, 3)
-    mask : np.ndarray, optional
+    mask
         Boolean mask where True indicates tissue regions. 
         Normalization statistics are computed only from tissue regions.
         
@@ -218,4 +214,4 @@ def color_normalize(image: np.ndarray,
     )
 
     normalized_image = (normalized_image / np.max(normalized_image, axis=(0, 1), keepdims=True)).astype(np.float32)
-    return normalized_image 
+    return normalized_image

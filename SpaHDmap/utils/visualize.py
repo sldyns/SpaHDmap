@@ -309,21 +309,21 @@ def visualize_gene(section: Union[STData, List[STData]],
 
     Parameters
     ----------
-    section : STData or list[STData]
+    section
         Section or list of sections to visualize
-    gene : str
+    gene
         Name of the gene to visualize
-    use_score : str
+    use_score
         Score type used to recover gene expression
-    scale : float
-        Scale factor for visualization, defaults to 4.0
-    format : str
-        Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
-    crop : bool
-        Whether to crop to mask region. If False, save full image size. Defaults to True.
-    show : bool
-        Whether to display the plot using plt.show(), defaults to True
-    verbose : bool
+    scale
+        Scale factor for visualization.
+    format
+        Output format ('jpg', 'png', 'pdf').
+    crop
+        Whether to crop to mask region. If False, save full image size.
+    show
+        Whether to display the plot using plt.show().
+    verbose
         Whether to print verbose output
     """
     if verbose: print(f"*** Visualizing expression of gene {gene}... ***")

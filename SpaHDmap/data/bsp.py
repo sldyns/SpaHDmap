@@ -14,16 +14,16 @@ def normalize_scale_factor(location: np.ndarray, D1: float = 1.0, D2: float = 3.
 
     Parameters
     ----------
-    location : np.ndarray
+    location
         Array of shape (n_cells, 2) with cell coordinates.
-    D1 : float, optional
+    D1
         Base small patch radius (default: 1.0).
-    D2 : float, optional
+    D2
         Base big patch radius (default: 3.0).
 
     Returns
     -------
-    scaled_D1, scaled_D2 : tuple of float
+    scaled_D1, scaled_D2
         Scaled patch radii.
     """
     range_vals = np.max(location, axis=0) - np.min(location, axis=0)
@@ -43,13 +43,13 @@ def target_statistics_by_radius(location: np.ndarray,
 
     Parameters
     ----------
-    location : np.ndarray
+    location
         Array of shape (n_cells, 2) with cell coordinates.
-    norm_counts : sparse matrix of shape (n_cells, n_genes)
+    norm_counts
         Normalized counts matrix.
-    radius : float
+    radius
         The patch radius.
-    dist_type : str, optional
+    dist_type
         Distance metric to use (default: 'euclidean').
 
     Returns
@@ -79,7 +79,8 @@ def compute_global_variance(counts) -> np.ndarray:
 
     Parameters
     ----------
-    counts : sparse matrix of shape (n_cells, n_genes)
+    counts
+        Sparse matrix of shape (n_cells, n_genes)
 
     Returns
     -------
@@ -103,21 +104,21 @@ def bsp(location: np.ndarray,
 
     Parameters
     ----------
-    location : np.ndarray
+    location
         A (n_cells, 2) array of cell coordinates.
-    counts : array-like or sparse matrix
+    counts
         A (n_cells, n_genes) log-transformed expression matrix.
-    D1 : float, optional
-        Base small patch radius (default: 1.0). Will be scaled.
-    D2 : float, optional
-        Base big patch radius (default: 3.0). Will be scaled.
-    dist_type : str, optional
-        Distance metric (default: 'euclidean').
-    normalize_method : str, optional
-        If 'minmax', perform min–max scaling on counts (default: 'minmax').
+    D1
+        Base small patch radius. Will be scaled.
+    D2
+        Base big patch radius. Will be scaled.
+    dist_type
+        Distance metric.
+    normalize_method
+        If 'minmax', perform min–max scaling on counts.
         Here, min–max scaling is implemented as dividing each gene by its maximum value.
-    scale_factor : float, optional
-        Exponent for global variance normalization (default: 1.0).
+    scale_factor
+        Exponent for global variance normalization.
 
     Returns
     -------

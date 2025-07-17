@@ -1,8 +1,8 @@
-# Command Line Tutorial
+# Running SpaHDmap from the command line
 
-## 1. Prepare the JSON Configuration File
+## 1. Prepare the JSON configuration file
 
-Before using SpaHDmap with command line, you need to prepare a JSON file that contains the paths to the input data and parameters. The structure of the JSON file is as follows:
+Before using SpaHDmap from the command line, you need to prepare a JSON file that contains the paths to the input data and parameters. The structure of the JSON file is as follows:
 
 ```json
 {
@@ -124,7 +124,7 @@ All parameters of `run_SpaHDmap.py` are optional. The following are the optional
 - `--visualize`: whether to visualize the results, default is True
 - `--create_mask`: whether to create the mask, default is True
 - `--swap_coord`: whether to swap the coordinates, default is True
-- `--select_svgs`: whether to select Spatially variable genes, default is True
+- `--select_svgs`: whether to select spatially variable genes, default is True
 - `--n_top_genes`: the number of top genes to select, default is 3000
 - `--load_model`: whether to load the model, use `--load_model` to load the model
 - `--save_model`: whether to save the model, default is True

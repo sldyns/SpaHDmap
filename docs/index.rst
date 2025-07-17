@@ -22,7 +22,10 @@ Key Features of SpaHDmap
 - Enables simultaneous analysis of multiple samples
 - Provides visualization tools for easy interpretation of results
 - Offers both Python API and command-line interface for flexibility
-
+- Allows selection of the optimal embedding dimension for improved interpretability.
+- Supports transferring a pre-trained model to new datasets.
+- Enables spatial domain refinement to capture biological sub-structures.
+- Facilitates differential expression and GO enrichment analysis for detected high-resolution clusters.
 
 Getting started with SpaHDmap
 ================================

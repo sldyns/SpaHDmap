@@ -10,9 +10,9 @@ class HE_Prediction_Dataset(Dataset):
 
     Parameters
     ----------
-    section : STData
+    section
         Spatial object containing the HE image and other information.
-    args : argparse.Namespace
+    args
         Arguments containing the split size and redundancy ratio.
     """
 
@@ -40,7 +40,7 @@ class HE_Prediction_Dataset(Dataset):
 
         Returns
         -------
-        sub_image : numpy.ndarray
+        sub_image
             Sub-image of the tissue.
         """
 
@@ -67,9 +67,9 @@ class HE_Dataset(Dataset):
 
     Parameters
     ----------
-    section : STData
+    section
         Spatial object containing the HE image and other information.
-    args : argparse.Namespace
+    args
         Arguments containing the split size and redundancy ratio.
     """
 
@@ -110,13 +110,13 @@ class HE_Dataset(Dataset):
 
         Returns
         -------
-        sub_img : numpy.ndarray
+        sub_img
             Sub-image of the tissue.
-        spot_exp : numpy.ndarray
+        spot_exp
             Spot expression.
-        feasible_coord : dict
+        feasible_coord
             Feasible pixel coordinates for each spot.
-        vd_score : float
+        vd_score
             VD score.
         """
 
@@ -160,12 +160,12 @@ class HE_Dataset(Dataset):
 
         Parameters
         ----------
-        center_coord : numpy.ndarray
+        center_coord
             Array containing the center coordinates.
 
         Returns
         -------
-        coord_within_radius : list
+        coord_within_radius
             List containing the pixel coordinates within the radius for each center.
         """
 
@@ -198,14 +198,14 @@ class HE_Dataset(Dataset):
 
         Parameters
         ----------
-        centers : numpy.ndarray
+        centers
             Array of shape (N, 2) containing the spot centers.
-        tissue_bound : numpy.ndarray
+        tissue_bound
             Array containing the tissue bounds.
 
         Returns
         -------
-        all_coord : dict
+        all_coord
             Dictionary containing the feasible pixel coordinates for each spot.
         """
 

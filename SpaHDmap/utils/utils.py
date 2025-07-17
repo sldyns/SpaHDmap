@@ -13,14 +13,14 @@ def query_batch(tree,
     """
     Query a batch of points using KDTree.
 
-    Parameters:
-        tree (scipy.spatial.kdtree.KDTree): 
+    Parameters
+        tree
             An instance of KDTree.
-        query_points (numpy.ndarray): 
+        query_points
             Array containing the query points.
 
     Returns:
-        nearest_indices (numpy.ndarray): 
+        nearest_indices
             Array containing the indices of the nearest neighbors.
     """
 
@@ -34,15 +34,15 @@ def query_kdtree_parallel(tree,
     Parallel query of KDTree to speed up the lookup process.
 
     Parameters:
-        tree: 
+        tree
             An instance of KDTree.
-        query_points (numpy.ndarray): 
+        query_points
             Array containing the query points.
-        workers (int): 
+        workers
             Number of workers to use for parallel querying.
 
     Returns:
-        nearest_indices (numpy.ndarray): 
+        nearest_indices
             Array containing the indices of the nearest neighbors.
     """
 
@@ -66,11 +66,11 @@ def find_nearby_spots(spot_coord: np.ndarray,
         Find the nearby spots based on the spot coordinates and the feasible domain.
 
         Parameters:
-            spot_coord (numpy.ndarray): 
+            spot_coord
                 Array containing spot coordinates.
-            row_range (Union[tuple, int]): 
+            row_range
                 Tuple indicating the start and end row for the feasible domain.
-            col_range (Union[tuple, int]): 
+            col_range
                 Tuple indicating the start and end column for the feasible domain.
 
         Returns:
@@ -100,17 +100,17 @@ def create_pseudo_spots(feasible_domain: np.ndarray,
     Create pseudo spots within a given feasible domain.
 
     Parameters:
-        feasible_domain (numpy.ndarray): 
+        feasible_domain
             Array indicating the feasible domain for spots.
-        radius (int): 
+        radius
             The minimum distance to maintain between each spot.
-        num_pseudo_spots (int): 
+        num_pseudo_spots
             The total number of pseudo spots to be created.
-        num_split (int): 
+        num_split
             The number of segments to divide the creation process into.
 
     Returns:
-        pseudo_spots (numpy.ndarray): 
+        pseudo_spots
             Array containing the coordinates of the pseudo spots.
     """
 
@@ -152,13 +152,13 @@ def construct_adjacency_matrix(spot_coord: np.ndarray,
     Construct the adjacency matrix for the graph.
 
     Parameters:
-        spot_coord (numpy.ndarray): 
+        spot_coord
             Array containing the coordinates of the spots.
-        spot_embeddings (numpy.ndarray): 
+        spot_embeddings
             Array containing the embeddings of the spots.
-        num_sequenced_spots (int):
+        num_sequenced_spots
             The number of sequenced spots in the dataset.
-        num_neighbors (int): 
+        num_neighbors
             The number of neighbors to consider for each spot.
 
     Returns:

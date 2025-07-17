@@ -18,17 +18,17 @@ def cluster_score(section: Union[STData, List[STData]],
 
     Parameters
     ----------
-    section : STData | list[STData]
+    section
         Section(s) to cluster
-    use_score : str
+    use_score
         Type of score to use for clustering ('NMF', 'GCN', or 'SpaHDmap')
-    resolution : float
+    resolution
         Resolution parameter for Louvain clustering
-    n_neighbors : int
+    n_neighbors
         Number of neighbors for KNN graph construction
-    scale : float
-        Scale factor for resizing score. Defaults to 4.
-    verbose : bool
+    scale
+        Scale factor for resizing score.
+    verbose
         Whether to print progress
 
     """

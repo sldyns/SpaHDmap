@@ -13,5 +13,5 @@ from .train import Mapper
 from .data import STData, prepare_stdata, select_svgs
 
 name = "SpaHDmap"
-__version__ = '0.0.9'
+__version__ = '0.1.0'
 __author__ = "Kun Qian, Junjie Tang"

@@ -32,22 +32,22 @@ class Mapper:
 
     Parameters
     ----------
-    section : STData | list[STData]
+    section
         STData or List of STData containing the spatial objects for the sections.
-    results_path : str
+    results_path
         The path to save the results.
-    rank : int, optional
-        The rank of the NMF model. Defaults to 20.
-    reference : dict, optional
-        Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}. 
-        Only used for multi-section analysis. Defaults to None.
-    ratio_pseudo_spots : int, optional
-        The ratio of pseudo spots to sequenced spots. Defaults to 5.
-    scale_split_size : bool, optional
-        Whether to scale the split size based on the scale rate. If True, split size will be adjusted 
-        based on the square root of the scale rate. Defaults to False.
-    verbose : bool, optional
-        Whether to print the progress or not. Defaults to False.
+    rank
+        The rank of the NMF model.
+    reference
+        Dictionary of query and reference pairs, e.g., {'query1': 'reference1', 'query2': 'reference2'}.
+        Only used for multi-section analysis.
+    ratio_pseudo_spots
+        The ratio of pseudo spots to sequenced spots.
+    scale_split_size
+        Whether to scale the split size based on the scale rate. If True, split size will be adjusted
+        based on the square root of the scale rate.
+    verbose
+        Whether to print the progress or not.
 
     Example
     -------
@@ -148,7 +148,7 @@ class Mapper:
         
         Parameters
         ----------
-        result_path : str, optional
+        result_path
             Path to the results directory containing metagene files. If None, uses current results_path.
             Will load both 'metagene_NMF.csv' and 'metagene.csv' from this directory.
         
@@ -336,8 +336,8 @@ class Mapper:
 
         Parameters
         ----------
-        save_score : bool
-            Whether to save the score or not. Defaults to False.
+        save_score
+            Whether to save the score or not.
         """
 
         # Prepare data
@@ -423,7 +423,7 @@ class Mapper:
 
         Parameters
         ----------
-        use_all_spot : bool
+        use_all_spot
             Whether to use all spots or not.
         """
 
@@ -448,9 +448,9 @@ class Mapper:
 
         Parameters
         ----------
-        min_val : int
+        min_val
             The minimum value for the split.
-        max_val : int
+        max_val
             The maximum value for the split.
 
         Returns
@@ -479,10 +479,10 @@ class Mapper:
 
         Parameters
         ----------
-        save_model : bool
-            Whether to save the model or not. Defaults to True.
-        load_model : bool
-            Whether to load the model or not. Defaults to True.
+        save_model
+            Whether to save the model or not.
+        load_model
+            Whether to load the model or not.
         """
 
         self.model.training_mode = False
@@ -612,15 +612,15 @@ class Mapper:
 
         Parameters
         ----------
-        spot_coord : numpy.ndarray
+        spot_coord
             Array containing spot coordinates.
-        radius : int
+        radius
             The radius within which to find coordinates.
-        image : numpy.ndarray
+        image
             sub-image.
-        batch_size : int
+        batch_size
             The batch size for the image embeddings.
-        embedding_size : int
+        embedding_size
             The size of the image embeddings.
 
         Returns
@@ -653,11 +653,11 @@ class Mapper:
 
         Parameters
         ----------
-        spot_coord : numpy.ndarray
+        spot_coord
             Array containing spot coordinates.
-        radius : int
+        radius
             The radius within which to find coordinates.
-        image : numpy.ndarray
+        image
             Original image.
 
         Returns
@@ -693,9 +693,9 @@ class Mapper:
 
         Parameters
         ----------
-        adj_matrix : scipy.sparse.coo_matrix
+        adj_matrix
             The adjacency matrix of the graph.
-        num_spots : int
+        num_spots
             The number of spots in the dataset.
         """
 
@@ -722,9 +722,9 @@ class Mapper:
 
         Parameters
         ----------
-        adj_matrix : scipy.sparse.coo_matrix
+        adj_matrix
             The adjacency matrix of the graph.
-        score : numpy.ndarray
+        score
             Array of spot scores.
 
         Returns
@@ -769,9 +769,9 @@ class Mapper:
 
         Parameters
         ----------
-        GMM_filter : bool
+        GMM_filter
             Whether to filter low signal using Gaussian Mixture Model.
-        save_score : bool
+        save_score
             Whether to save the GCN score or not.
         """
 
@@ -849,13 +849,13 @@ class Mapper:
 
         Parameters
         ----------
-        score : np.ndarray
+        score
             Pixel-level score data with shape (n_components, height, width).
-        coords : np.ndarray  
+        coords
             Spot coordinates with shape (n_spots, 2) in (row, col) format.
-        radius : float
+        radius
             Radius for spot extraction in pixels.
-        quantile : float, optional (default=0.5)
+        quantile
             Quantile value for aggregating pixel values within each spot region.
             
         Returns
@@ -914,16 +914,16 @@ class Mapper:
 
         Parameters
         ----------
-        spot_score : numpy.ndarray
+        spot_score
             Array containing spot scores.
-        kernel_size : int
+        kernel_size
             The size of the kernel for blurring.
-        threshold : float
-            The threshold for mean change between iterations. Defaults to 0.01.
+        threshold
+            The threshold for mean change between iterations.
 
         Returns
         -------
-        spot_score : numpy.ndarray
+        spot_score
             smoothed spot scores.
         """
 
@@ -959,7 +959,7 @@ class Mapper:
 
         Parameters
         ----------
-        use_score : str
+        use_score
             The type of embedding to be visualized.
         """
 
@@ -987,7 +987,7 @@ class Mapper:
 
         Parameters
         ----------
-        load_decoder_params : bool
+        load_decoder_params
             Whether to load the decoder parameters or not.
         """
 
@@ -1026,10 +1026,10 @@ class Mapper:
 
         Parameters
         ----------
-        save_model : bool
-            Whether to save the model or not. Defaults to True.
-        load_model : bool
-            Whether to load the model or not. Defaults to True.
+        save_model
+            Whether to save the model or not.
+        load_model
+            Whether to load the model or not.
         """
 
         self.model.training_mode = True
@@ -1151,7 +1151,7 @@ class Mapper:
 
         Parameters
         ----------
-        save_score : bool
+        save_score
             Whether to save the SpaHDmap scores or not.
         """
         
@@ -1204,9 +1204,9 @@ class Mapper:
 
         Parameters
         ----------
-        image : numpy.ndarray
+        image
             The cropped image.
-        VD_score : numpy.ndarray
+        VD_score
             The extended score.
 
         Returns
@@ -1264,14 +1264,14 @@ class Mapper:
         
         Parameters
         ----------
-        index : int
+        index
             The embedding index to extract from (0-based)
-        section : str, STData, list or None
+        section
             Section(s) to extract from. If None, uses all sections in Mapper.
-        threshold : float
-            Threshold value, spots above this value will be extracted, defaults to 0.05
-        use_score : str  
-            The score type to use, defaults to 'SpaHDmap_spot'
+        threshold
+            Threshold value, spots above this value will be extracted.
+        use_score
+            The score type to use.
             
         Returns
         -------
@@ -1352,17 +1352,17 @@ class Mapper:
 
         Parameters
         ----------
-        section : str | STData | list, optional (default=None)
+        section
             Section(s) to cluster. If None, uses all sections.
-        use_score : str, optional (default='SpaHDmap')
+        use_score
             Score type to use for clustering.
-        resolution : float, optional (default=0.8)
+        resolution
             Resolution parameter for Louvain clustering.
-        n_neighbors : int, optional (default=50)
+        n_neighbors
             Number of neighbors for graph construction.
-        format : str, optional (default='png')
+        format
             Output format for visualization ('jpg', 'png', 'pdf').
-        show : bool, optional (default=True)
+        show
             Whether to display the plot using plt.show().
         """
         if section is None:
@@ -1394,12 +1394,12 @@ class Mapper:
 
         Parameters
         ----------
-        gene : str or List[str]
+        gene
             Gene name(s) to recover expression for, can be a single string or a list of strings
-        section : str, STData or list
+        section
             Sections to recover gene expression for, if None, use all sections
-        use_score : str
-            Score type to use for gene expression recovery, defaults to 'SpaHDmap'
+        use_score
+            Score type to use for gene expression recovery.
         """
         # Process section parameter
         if section is None:
@@ -1477,22 +1477,22 @@ class Mapper:
 
         Parameters
         ----------
-        section : str or list
+        section
             The section(s) to visualize. If None, uses all sections
-        use_score : str
+        use_score
             The type of score to visualize (e.g., 'NMF', 'GCN', 'SpaHDmap')
-        target : str
+        target
             What to visualize - either 'score', 'cluster', or 'gene'
-        gene : str
+        gene
             Gene name to visualize when target='gene'
-        index : int
-            For score visualization only - the index of embedding to show. Defaults to None
-        format : str
-            Output format ('jpg', 'png', 'pdf'). Defaults to 'png'.
-        crop : bool
-            Whether to crop to mask region. If False, save full image size. Defaults to True.
-        show : bool
-            Whether to display the plot using plt.show(). Defaults to True
+        index
+            For score visualization only - the index of embedding to show.
+        format
+            Output format ('jpg', 'png', 'pdf').
+        crop
+            Whether to crop to mask region. If False, save full image size.
+        show
+            Whether to display the plot using plt.show().
         """
         # Process section input
         if section is None:
@@ -1556,18 +1556,18 @@ class Mapper:
         
         Parameters
         ----------
-        save_score : bool, optional
-            Whether to save computed scores as numpy arrays. Defaults to False.
-        save_model : bool, optional
-            Whether to save model checkpoints. Defaults to True.
-        load_model : bool, optional
-            Whether to load existing model checkpoints if available. Defaults to True.
-        visualize : bool, optional
-            Whether to generate and save visualizations. Defaults to True.
-        format : str, optional
-            Output format for visualizations ('jpg', 'png', 'pdf'). Defaults to 'png'.
-        repeat_times : int, optional
-            Number of times to repeat the pipeline with different random initializations. Defaults to 1.
+        save_score
+            Whether to save computed scores as numpy arrays.
+        save_model
+            Whether to save model checkpoints.
+        load_model
+            Whether to load existing model checkpoints if available.
+        visualize
+            Whether to generate and save visualizations.
+        format
+            Output format for visualizations ('jpg', 'png', 'pdf').
+        repeat_times
+            Number of times to repeat the pipeline with different random initializations.
         """
 
         # If only run once, use the original logic

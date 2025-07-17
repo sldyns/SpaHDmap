@@ -13,20 +13,6 @@ We tested the tutorials on the following system:
 
 It takes about 1~2 hours to complete each tutorial. If you encounter any issues, please open an issue on the [SpaHDmap GitHub repository](https://github.com/sldyns/SpaHDmap/issues).
 
-## Command-line Tutorial
-
-```{toctree}
-:maxdepth: 1
-
-Command-line
-```
-
-This tutorial covers:
-
-- Preparing your configuration file
-- Running SpaHDmap via command line
-
-## HE Image Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -34,14 +20,8 @@ This tutorial covers:
 HE-image
 ```
 
-This tutorial covers:
+Provides a complete, step-by-step walkthrough of the SpaHDmap workflow using a 10X Visium H&E stained dataset, from data loading to downstream analysis.
 
-- Preparing your data
-- Setting up the configuration file
-- Running SpaHDmap via command line
-- Using the Python API for more control
-
-## IHC Image Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -49,14 +29,8 @@ This tutorial covers:
 IHC-image
 ```
 
-This advanced tutorial includes:
+Focuses on applying SpaHDmap to spatial transcriptomics data with IHC-stained images, covering data preparation and analysis for this image data.
 
-- Data preparation for IHC images
-- Configuring SpaHDmap for IHC data
-- Running the analysis pipeline
-- Interpreting the results
-
-## Multi-section Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -64,14 +38,17 @@ This advanced tutorial includes:
 Multi-section
 ```
 
-This advanced tutorial covers:
+Explains how to analyze multiple tissue sections together, including how to handle batch effects between different sections for an integrated analysis.
 
-- Setting up multi-section data
-- Configuring SpaHDmap for multiple sections
-- Running the analysis across sections
-- Visualizing and comparing results from different sections
 
-## Rank Selection Tutorial
+```{toctree}
+:maxdepth: 1
+
+Command-line
+```
+
+Details how to run the entire SpaHDmap pipeline using the command-line interface, including how to set up the necessary JSON configuration file.
+
 
 ```{toctree}
 :maxdepth: 1
@@ -79,12 +56,8 @@ This advanced tutorial covers:
 Rank-selection
 ```
 
-This tutorial covers:
+Guides you through selecting the optimal rank (number of components) for SpaHDmap analysis using cophenetic correlation to ensure stable and meaningful results.
 
-- Using cophenetic correlation to determine optimal rank
-- Applying the selected rank in SpaHDmap analysis
-
-## Model Transfer Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -92,12 +65,8 @@ This tutorial covers:
 Model-transfer
 ```
 
-This tutorial covers:
+Demonstrates how to apply a pre-trained SpaHDmap model to a new dataset, allowing for rapid analysis without retraining from scratch.
 
-- Loading pre-trained SpaHDmap models and new dataset
-- Getting SpaHDmap score using pre-trained models
-
-## Spatial Domain Refinement Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -105,12 +74,8 @@ This tutorial covers:
 Domain-refinement
 ```
 
-This tutorial covers:
+Shows how to refine the analysis by focusing on a specific region of interest, extracting high-score spots and re-running the pipeline for a more detailed view.
 
-- Extracting high-score spots from region of interest
-- Re-running SpaHDmap on refined spatial domains
-
-## Color Normalization Tutorial
 
 ```{toctree}
 :maxdepth: 1
@@ -118,7 +83,13 @@ This tutorial covers:
 Color-normalization
 ```
 
-This tutorial covers:
+Illustrates how to use color normalization to reduce image-based batch effects in multi-section H&E stained datasets, improving consistency across sections.
 
-- Applying color normalization to multi-section data
-- Running the analysis across sections
+
+```{toctree}
+:maxdepth: 1
+
+DE-GO-analysis
+```
+
+Show how to perform differential expression analysis and GO enrichment analysis for the results of multi-section data analysis

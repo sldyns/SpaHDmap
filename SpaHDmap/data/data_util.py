@@ -5,6 +5,8 @@ import squidpy as sq
 from skimage import io
 from typing import Tuple, Optional, Union, List
 from skimage import filters
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import anndata
 import scipy
 import math
@@ -20,43 +22,42 @@ class STData:
     """
     A class for handling and managing spatial transcriptomics data.
 
-    This class processes and stores various components of spatial transcriptomics data,
-    including image data, spot coordinates, and gene expression data.
-
     Parameters
     ----------
-    adata : anndata.AnnData
+    adata
         AnnData object containing the spatial transcriptomics data.
-    section_name : str
+    section_name
         Name of the tissue section.
-    scale_rate : float
-        Scale rate for adjusting coordinates and image size.
-    radius : float
+    radius
         Radius of spots in original scale.
-    swap_coord : bool
-        Whether to swap the x and y coordinates. Defaults to True.
-    create_mask : bool
-        Whether to create a mask for the image. Defaults to True.
-    image_type : Optional[str]
-        Type of the image ('HE' or 'Immunofluorescence'). If None, will be auto-detected.
-    color_normalize : bool
-        Whether to apply Reinhard color normalization. Only works for H&E images. Defaults to False.
-    gene_list : Optional[List[str]]
+    scale_rate
+        Scale rate for adjusting coordinates and image size.
+    select_hvgs
+        Whether to select highly variable genes (HVGs) from the data.
+    gene_list
         List of genes to arrange the data by. If provided, select_hvgs will be set to False.
-        Missing genes will be added with zero expression. Defaults to None.
+        Missing genes will be added with zero expression.
+    swap_coord
+        Whether to swap the x and y coordinates.
+    create_mask
+        Whether to create a mask for the image.
+    image_type
+        Type of the image ('HE' or 'Immunofluorescence'). If None, will be auto-detected.
+    color_norm
+        Whether to apply Reinhard color normalization. Only works for H&E images.
     """
 
     def __init__(self,
                  adata: anndata.AnnData,
-                 select_hvgs: bool,
                  section_name: str,
-                 scale_rate: float,
                  radius: float,
+                 scale_rate: float = 1.,
+                 select_hvgs: bool = True,
+                 gene_list: Optional[List[str]] = None,
                  swap_coord: bool = True,
                  create_mask: bool = True,
                  image_type: Optional[str] = None,
-                 color_norm: bool = False,
-                 gene_list: Optional[List[str]] = None):
+                 color_norm: bool = False):
 
         # Process the AnnData object
         self.adata = preprocess_adata(adata, select_hvgs, swap_coord, gene_list)
@@ -98,7 +99,7 @@ class STData:
 
         Parameters
         ----------
-        path : str
+        path
             Path to load the STData object from. Should end with '.st'
 
         Returns
@@ -124,7 +125,7 @@ class STData:
 
         Parameters
         ----------
-        path : str
+        path
             Path to save the STData object. Should end with '.st'
         """
         if not path.endswith('.st'):
@@ -137,31 +138,60 @@ class STData:
         with open(path, 'wb') as f:
             pickle.dump(self, f)
 
-    def __repr__(self):
-        """
-        Return a string representation of the STData object.
-        """
-        return (f"STData object for section: {self.section_name}\n"
-                f"Number of spots: {self.num_spots}\n"
-                f"Number of genes: {len(self.genes)}\n"
-                f"Image shape: {self.image.shape}\n"
-                f"Scale rate: {self.scale_rate}\n"
-                f"Spot radius: {self.radius}\n"
-                f"Image type: {self.image_type}\n"
-                f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
 
-    def __str__(self):
+    def show(self, scale: float = 4.):
         """
-        Return a string with a summary of the STData object.
+        Visualizes the spots and the tissue mask on the image.
+
+        Parameters
+        ----------
+        scale
+            The scale factor for visualization.
         """
-        return (f"STData object for section: {self.section_name}\n"
-                f"Number of spots: {self.num_spots}\n"
-                f"Number of genes: {len(self.genes)}\n"
-                f"Image shape: {self.image.shape}\n"
-                f"Scale rate: {self.scale_rate}\n"
-                f"Spot radius: {self.radius}\n"
-                f"Image type: {self.image_type}\n"
-                f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
+
+        # Prepare image for plotting
+        img_display = np.transpose(self.image, (1, 2, 0))
+
+        # Crop the image to the region of interest
+        img_cropped = img_display[self.row_range[0]:self.row_range[1], self.col_range[0]:self.col_range[1]]
+
+        # Scale down the image
+        new_shape = (int(img_cropped.shape[1] / scale), int(img_cropped.shape[0] / scale))
+        img_scaled = cv2.resize(img_cropped, new_shape, interpolation=cv2.INTER_AREA)
+
+        # Create a figure with two subplots
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        fig.suptitle(f'Section: {self.section_name}')
+
+        # --- First subplot: Spots on Image ---
+        ax1.imshow(img_scaled)
+        ax1.set_title('Spots on Image')
+        ax1.axis('off')
+
+        # Draw circles for each spot
+        for spot in self.spot_coord:
+            row, col = spot
+            # Adjust coordinates based on the crop range and scale
+            adj_row = (row - self.row_range[0]) / scale
+            adj_col = (col - self.col_range[0]) / scale
+
+            # matplotlib uses (x, y) which corresponds to (col, row)
+            circle = patches.Circle((adj_col, adj_row), radius=self.radius / scale, color='r', alpha=0.3)
+            ax1.add_patch(circle)
+
+        # --- Second subplot: Mask on Image ---
+        ax2.imshow(img_scaled)
+        ax2.set_title('Mask on Image')
+        ax2.axis('off')
+
+        # Scale down the mask and create overlay
+        mask_scaled = cv2.resize(self.mask.astype(np.uint8), new_shape, interpolation=cv2.INTER_NEAREST).astype(bool)
+        mask_overlay = np.zeros((mask_scaled.shape[0], mask_scaled.shape[1], 4), dtype=float)
+        mask_overlay[mask_scaled] = [0, 1, 0, 0.4]  # Green, 40% transparent where mask is True
+        ax2.imshow(mask_overlay)
+
+        plt.tight_layout(rect=[0, 0, 1, 0.96])
+        plt.show()
 
     def _preprocess(self,
                      spot_coord: np.ndarray,
@@ -174,15 +204,15 @@ class STData:
 
         Parameters
         ----------
-        spot_coord : np.ndarray
+        spot_coord
             Array of original spot coordinates.
-        image : np.ndarray
+        image
             Original image data.
-        create_mask : bool
+        create_mask
             Whether to create a mask for the image.
-        image_type : str
+        image_type
             Type of the image ('HE' or 'Immunofluorescence').
-        color_norm : bool
+        color_norm
             Whether to apply Reinhard color normalization.
         """
 
@@ -275,6 +305,32 @@ class STData:
             col_range = np.arange(max(col - self.radius, 0), min(col + self.radius + 1, hires_shape[1]))
             self.feasible_domain[np.ix_(row_range, col_range)] = 0
 
+    def __repr__(self):
+        """
+        Return a string representation of the STData object.
+        """
+        return (f"STData object for section: {self.section_name}\n"
+                f"Number of spots: {self.num_spots}\n"
+                f"Number of genes: {len(self.genes)}\n"
+                f"Image shape: {self.image.shape}\n"
+                f"Scale rate: {self.scale_rate}\n"
+                f"Spot radius: {self.radius}\n"
+                f"Image type: {self.image_type}\n"
+                f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
+
+    def __str__(self):
+        """
+        Return a string with a summary of the STData object.
+        """
+        return (f"STData object for section: {self.section_name}\n"
+                f"Number of spots: {self.num_spots}\n"
+                f"Number of genes: {len(self.genes)}\n"
+                f"Image shape: {self.image.shape}\n"
+                f"Scale rate: {self.scale_rate}\n"
+                f"Spot radius: {self.radius}\n"
+                f"Image type: {self.image_type}\n"
+                f"Available scores: {', '.join(score for score, value in self.scores.items() if value is not None)}")
+
     def __getstate__(self):
         """Custom pickling to handle unpicklable objects."""
         state = self.__dict__.copy()
@@ -291,7 +347,7 @@ class STData:
 
         # Initialize empty save paths if needed
         if not self.save_paths:
-            self.save_paths = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None}
+            self.save_paths = {'NMF': None, 'GCN': None, 'VD': None, 'SpaHDmap': None, 'SpaHDmap_spot': None}
 
 def _classify_image_type(image):
     """
@@ -299,7 +355,7 @@ def _classify_image_type(image):
 
     Parameters
     ----------
-    image : numpy.ndarray
+    image
         The input image. Can be high bit depth.
 
     Returns
@@ -326,7 +382,7 @@ def read_10x_data(data_path: str) -> anndata.AnnData:
 
     Parameters
     ----------
-    data_path : str
+    data_path
         Path to the 10x Visium data directory.
 
     Returns
@@ -345,11 +401,11 @@ def read_from_image_and_coord(image_path: str,
 
     Parameters
     ----------
-    image_path : str
+    image_path
         Path to the H&E image file.
-    coord_path : str
+    coord_path
         Path to the spot coordinates file.
-    exp_path : str
+    exp_path
         Path to the gene expression file.
 
     Returns
@@ -380,15 +436,15 @@ def preprocess_adata(adata: anndata.AnnData,
 
     Parameters
     ----------
-    adata : anndata.AnnData
+    adata
         AnnData object containing the spatial transcriptomics data.
-    select_hvgs : bool
-        Whether to select highly variable genes (HVGs). Defaults to True.
-    swap_coord : bool
-        Whether to swap the x and y coordinates. Defaults to True.
-    gene_list : Optional[List[str]]
+    select_hvgs
+        Whether to select highly variable genes (HVGs).
+    swap_coord
+        Whether to swap the x and y coordinates.
+    gene_list
         List of genes to arrange the data by. If provided, select_hvgs will be set to False.
-        Missing genes will be added with zero expression. Defaults to None.
+        Missing genes will be added with zero expression.
 
     Returns
     -------
@@ -464,58 +520,79 @@ def preprocess_adata(adata: anndata.AnnData,
     return adata
 
 def prepare_stdata(section_name: str = None,
-                   st_path: Optional[str] = None,
-                   image_path: Optional[str] = None,
-                   adata: Optional[sc.AnnData] = None,
+                   st_path: str = None,
+                   image_path: str = None,
+                   adata: sc.AnnData = None,
                    select_hvgs: bool = True,
                    scale_rate: float = 1,
                    radius: float = None,
                    swap_coord: bool = True,
                    create_mask: bool = True,
-                   image_type: Optional[str] = None,
+                   image_type: str = None,
                    color_norm: bool = False,
-                   gene_list: Optional[List[str]] = None,
+                   gene_list: List[str] = None,
                    **kwargs):
     """
-    Prepare STData object from various data sources with priority.
+    Prepare an STData object from various data sources, with a specific loading priority.
+
+    This function orchestrates the loading and preprocessing of spatial transcriptomics data
+    to create a unified STData object. It can handle several input formats, including a
+    pre-saved STData object, an AnnData object, 10x Visium data directories, or separate
+    files for expression, coordinates, and imaging.
+
+    The function follows a specific priority for loading the gene expression data:
+
+    - **st_path**: If provided, it will first attempt to load a serialized STData object.
+    - **adata**: If `st_path` is not given or fails, it will use a provided AnnData object.
+    - **visium_path**: If `adata` is not provided, it will look for a 10x Visium data directory.
+    - **spot_coord_path & spot_exp_path**: If none of the above are available, it will load the data from separate coordinate and expression files.
+
+    Internal processing steps include:
+
+    - **Data Reading**: Loads data based on the priority scheme.
+    - **Gene Expression Processing**: Normalizes and log-transforms the expression data. Optionally, it selects spatially variable genes (SVGs).
+    - **Image Processing**: Reads the high-resolution image, creates a tissue mask, and can apply color normalization for H&E images.
+    - **Coordinate Handling**: Adjusts spot coordinates based on the scale rate and can swap row/column coordinates if needed, usually it has to be performed for the 10X Visium data.
 
     Parameters
     ----------
-    section_name : str
-        Name of the tissue section.
-    st_path : Optional[str]
-        Path to saved .st file to load STData object. If provided, tries to load from this first.
-    image_path : Optional[str]
-        Path to the H&E image file. Required if st_path is None or loading fails.
-    adata : Optional[sc.AnnData]
-        AnnData object containing the spatial transcriptomics data.
-    scale_rate : float
-        Scale rate for adjusting coordinates and image size. Defaults to 1.
-    radius : float
-        Radius of spots in original scale. Defaults to None.
-    swap_coord : bool
-        Whether to swap the x and y coordinates. Defaults to True.
-    create_mask : bool
-        Whether to create a mask for the image. Defaults to True.
-    image_type : Optional[str]
-        Type of the image ('HE' or 'Immunofluorescence'). If None, will be auto-detected.
-    color_norm : bool
-        Whether to apply Reinhard color normalization. Only works for H&E images. Defaults to False.
-    gene_list : Optional[List[str]]
-        List of genes to arrange the data by. If provided, select_hvgs will be set to False.
-        Missing genes will be added with zero expression. Defaults to None.
-    **kwargs : Additional keyword arguments, including visium_path, spot_coord_path, and spot_exp_path.
-    visium_path : str
-        Path to the 10x Visium data directory.
-    spot_coord_path : str
-        Path to the spot coordinates file.
-    spot_exp_path : str
-        Path to the gene expression file.
+    section_name
+        The name for the tissue section. This is a required parameter.
+    st_path
+        Path to a saved `.st` file to load a pre-existing STData object.
+    image_path
+        Path to the high-resolution tissue image file. Required unless loading from `st_path`.
+    adata
+        An AnnData object containing expression data and spatial coordinates.
+    select_hvgs
+        Whether to select highly variable genes (HVGs).
+    scale_rate
+        The factor by which to scale the image and coordinates.
+    radius
+        The radius of the spots in the original, unscaled image. This is required
+        when loading data from `spot_coord_path` and `spot_exp_path`.
+    swap_coord
+        Whether to swap the row and column coordinates.
+    create_mask
+        Whether to create a binary mask of the tissue from the image.
+    image_type
+        The type of imaging data, either 'HE' or 'Immunofluorescence'.
+        If None, it will be auto-detected.
+    color_norm
+        Whether to apply Reinhard color normalization. This is only applicable to H&E images.
+    gene_list
+        A specific list of genes to use. If provided, `select_hvgs` is ignored.
+    **kwargs :
+        Additional keyword arguments for different loading schemes.
+
+        - `visium_path` (str): Path to a 10x Visium data directory.
+        - `spot_coord_path` (str): Path to the spot coordinates file (e.g., `.csv`).
+        - `spot_exp_path` (str): Path to the gene expression file (e.g., `.h5`).
 
     Returns
     -------
     STData
-        Prepared STData object.
+        A fully prepared STData object ready for analysis.
     """
     # Try loading from st_path first if provided
     if st_path is not None:
@@ -607,17 +684,17 @@ def select_svgs(section: Union[STData, List[STData]],
                 n_top_genes: int = 3000,
                 method: str = 'moran'):
     """
-    Select the top SVGs based on Moran's I or SPARK-X across multiple tissue sections.
+    Select the top SVGs based on Moran's I or SPARK-X or BSP for a given section or list of sections.
     Update each section's AnnData object to only include the selected SVGs.
 
     Parameters
     ----------
-    section : Union[STData, List[STData]]
+    section
         STData object or list of STData objects.
-    n_top_genes : int
-        Number of top SVGs to select, defaults to 3000.
-    method : str
-        Method to use for selecting SVGs. Either 'moran' or 'sparkx', defaults to 'moran'.
+    n_top_genes
+        Number of top SVGs to select.
+    method
+        Method to use for selecting SVGs. Either 'moran', 'sparkx' or 'bsp'.
 
     """
     sections = section if isinstance(section, list) else [section]
@@ -678,7 +755,6 @@ def select_svgs(section: Union[STData, List[STData]],
             combined_bsp = pd.concat(bsp_pvals, axis=1, keys=[s.section_name for s in sections])
             combined_bsp['mean_rank'] = combined_bsp.mean(axis=1).rank(method='dense', ascending=True)
             selected_genes = combined_bsp.sort_values('mean_rank').head(n_top_genes).index.tolist()
-
 
         else:
             raise ValueError("Invalid method. Choose either 'moran' or 'sparkx'.")
