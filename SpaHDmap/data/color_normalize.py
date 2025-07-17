@@ -2,7 +2,7 @@
 """
 Color Normalization Module
 
-This module is replicating the color normalization method used in the HisomicsTK package (https://github.com/DigitalSlideArchive/HistomicsTK).
+This module is replicating the color normalization method used in the HistomicsTK package (https://github.com/DigitalSlideArchive/HistomicsTK).
 """
 
 import numpy as np

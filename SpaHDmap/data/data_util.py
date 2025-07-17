@@ -757,7 +757,7 @@ def select_svgs(section: Union[STData, List[STData]],
             selected_genes = combined_bsp.sort_values('mean_rank').head(n_top_genes).index.tolist()
 
         else:
-            raise ValueError("Invalid method. Choose either 'moran' or 'sparkx'.")
+            raise ValueError("Invalid method. Choose either 'moran', 'sparkx' or 'bsp'.")
 
     # Update each section's AnnData object with the selected SVGs
     for section in sections:

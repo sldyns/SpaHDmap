@@ -39,7 +39,7 @@ def davies(q, lda, lim=3000, acc=1e-4):
     ----------
     q
         The value at which to calculate the CDF.
-    lambdas
+    lda
         Eigenvalues of the quadratic form.
     lim
         Upper limit for integration. Default is 10000.
@@ -211,7 +211,7 @@ def sparkx_pval(igene: int,
     igene
         A gene index
     lambda_G
-        A p-vector of eigen values for all genes
+        A p-vector of eigenvalues for all genes
     allstat
         A p-vector of test statistics for all genes
 
