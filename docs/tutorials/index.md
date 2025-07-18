@@ -93,3 +93,12 @@ DE-GO-analysis
 ```
 
 Show how to perform differential expression analysis and GO enrichment analysis for the results of multi-section data analysis
+
+
+```{toctree}
+:maxdepth: 1
+
+Download-data
+```
+
+Illustrates how to download and prepare for use with `SpaHDmap`, including using scanpy and manually downloading from 10X Genomics or Google Drive.
