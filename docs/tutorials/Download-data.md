@@ -68,7 +68,7 @@ st_data = hdmap.prepare_stdata(section_name='mouse_posterior',
                                radius=45) # This value depends on the dataset
 ```
 
-## Method 3: Google Drive
+## Download datasets in tutorials from Google Drive
 
 For convenience, we have also uploaded all the datasets used in this tutorial to [Google Drive](https://drive.google.com/drive/folders/16L1nm3TzDDTFPVAaRXVKRp4LuCqvXbt2).  You can download all these datasets and store them in the `data/` directory of your project.
 
