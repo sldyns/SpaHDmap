@@ -122,6 +122,10 @@ def reinhard(im_src: np.ndarray,
     """
     Perform Reinhard color normalization on an RGB image.
     
+    This method normalizes the color distribution of an image by matching
+    the mean and standard deviation of its LAB color space representation
+    to target values.
+
     Parameters
     ----------
     im_src

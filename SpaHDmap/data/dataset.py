@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 from . import STData
 
@@ -47,7 +48,7 @@ class HE_Prediction_Dataset(Dataset):
         tissue_coord = self.tissue_coord[idx, :]
         sub_image = self.image[:, tissue_coord[0]:tissue_coord[1], tissue_coord[2]:tissue_coord[3]]
 
-        return sub_image
+        return torch.tensor(sub_image)
 
     def __len__(self):
         """
@@ -140,7 +141,7 @@ class HE_Dataset(Dataset):
         # Get feasible pixel coordinates for each spot
         feasible_coord = self.get_feasible_coord(spot_coord, tissue_coord)
 
-        return sub_img, spot_exp, feasible_coord, vd_score, self.name
+        return torch.tensor(sub_img), torch.tensor(spot_exp), feasible_coord, torch.tensor(vd_score), self.name
 
     def __len__(self):
         """
@@ -256,4 +257,4 @@ class HE_Score_Dataset(Dataset):
 
         sub_image = self.image[:, row_start:row_start + self.split_size, col_start:col_start + self.split_size]
         sub_score = self.VD_score[:, row_start:row_start + self.split_size, col_start:col_start + self.split_size]
-        return sub_image, sub_score, row_start, col_start
+        return torch.tensor(sub_image), torch.tensor(sub_score), row_start, col_start

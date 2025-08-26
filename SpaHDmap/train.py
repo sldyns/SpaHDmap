@@ -109,13 +109,12 @@ class Mapper:
         self.model_path = f'{self.results_path}/models/'
         os.makedirs(self.model_path, exist_ok=True)
 
-        self.device = torch.device('cpu')
         if torch.cuda.is_available():
             self.device = torch.device('cuda')
             torch.backends.cudnn.benchmark = True
         else:
-            torch.device('cpu')
-        print(f'*** Using GPU ***' if torch.cuda.is_available() else '*** Using CPU ***')
+            self.device = torch.device('cpu')
+        print(f'*** Using GPU ***' if self.device.type == 'cuda' else '*** Using CPU ***')
 
         self.model = SpaHDmapUnet(rank=self.rank, num_genes=self.num_genes,
                                   num_channels=self.num_channels, reference=self.reference)
@@ -521,8 +520,11 @@ class Mapper:
         for name, p in self.model.named_parameters():
             p.requires_grad = True
         
-        # Enable mixed precision training 
-        self.scaler = torch.cuda.amp.GradScaler()
+        # Enable mixed precision training only for GPU
+        if self.device.type == 'cuda':
+            self.scaler = torch.cuda.amp.GradScaler()
+        else:
+            self.scaler = None
 
         # Prepare the training dataset
         self.train_dataset = torch.utils.data.ConcatDataset([
@@ -531,7 +533,7 @@ class Mapper:
 
         # Prepare the training loader
         self.train_loader = DataLoader(dataset=self.train_dataset, batch_size=self.args.batch_size, shuffle=True,
-                                       drop_last=False, pin_memory=True, num_workers=self.args.num_workers)
+                                       drop_last=False, pin_memory=self.device.type == 'cuda', num_workers=self.args.num_workers)
 
         # Prepare the loss, optimizer and scheduler
         self.loss = nn.MSELoss()
@@ -544,7 +546,7 @@ class Mapper:
         Execute the pre-training process for the SpaHDmap model.
         
         This method performs autoencoder pre-training with:
-        1. Mixed precision training for efficiency
+        1. Mixed precision training for efficiency (GPU only)
         2. Progressive loss monitoring and early stopping
         3. Cosine annealing learning rate scheduling
         4. Convergence detection based on loss stabilization
@@ -552,7 +554,7 @@ class Mapper:
         Notes
         -----
         Early stopping occurs if loss change is less than 5% after 
-        reaching halfway through training iterations.
+        reaching halfway through training iterations. Mixed precision is automatically disabled when using CPU.
         """
         self._prepare_pretrain()
 
@@ -567,16 +569,26 @@ class Mapper:
                 img = img.to(self.device)
                 img = nn.UpsamplingBilinear2d(size=self.args.split_size)(img)
 
-                # Automatic mixed precision training
-                with torch.cuda.amp.autocast():
+                # Forward pass with optional mixed precision
+                if self.device.type == 'cuda':
+                    # Automatic mixed precision training (GPU only)
+                    with torch.autocast("cuda"):
+                        out = self.model(img)
+                        loss = self.loss(out, img)
+                else:
+                    # Standard training (CPU or when AMP not available)
                     out = self.model(img)
                     loss = self.loss(out, img)
                     
                 self.optimizer.zero_grad()
                 
-                self.scaler.scale(loss).backward()
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                if self.device.type == 'cuda':
+                    self.scaler.scale(loss).backward()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    loss.backward()
+                    self.optimizer.step()
                 
                 self.scheduler.step()
                 
@@ -816,7 +828,8 @@ class Mapper:
         # Delete the GCN model
         del self.GCN
         gc.collect()
-        torch.cuda.empty_cache()
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
 
         # Refine the metagene
         LR = LinearRegression(fit_intercept=False, positive=True)
@@ -837,7 +850,7 @@ class Mapper:
 
         all_exp = np.vstack(all_exp)
         LR.fit(all_score, all_exp)
-        self.metagene_GCN.loc[:, :] = LR.coef_
+        self.metagene_GCN.loc[:, :] = LR.coef_.astype('float32')
 
     def _calculate_spot_score(self,
                              score: np.ndarray,
@@ -1045,7 +1058,8 @@ class Mapper:
 
         for param in self.model.parameters():
             param.requires_grad = False
-        torch.cuda.empty_cache()
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
 
         self.metagene = pd.DataFrame(self.model.nmf_decoder.data.cpu().numpy(),
                                      columns=[f'Embedding_{i+1}' for i in range(self.rank)],
@@ -1194,7 +1208,8 @@ class Mapper:
         # Convert model back to full precision
         self.model = self.model.float()
         self.model.train()
-        torch.cuda.empty_cache()
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
 
     def _extract_embedding(self,
                            image: np.ndarray,
@@ -1251,7 +1266,8 @@ class Mapper:
 
         # Remove the padding
         embeddings = embeddings[:, bound_width:-bound_width, bound_width:-bound_width]
-        torch.cuda.empty_cache()
+        if self.device.type == 'cuda':
+            torch.cuda.empty_cache()
         return embeddings
 
     def extract_spots(self,

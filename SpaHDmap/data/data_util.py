@@ -634,7 +634,22 @@ def prepare_stdata(section_name: str = None,
         if not all([spot_coord_path, spot_exp_path]):
             raise ValueError("Missing required paths for reading from scratch.")
 
-        adata = sc.read(spot_exp_path)
+        if '.h5' in spot_exp_path:
+            try:
+                adata = sc.read_h5ad(spot_exp_path)
+            except TypeError:
+                try:
+                    adata = sc.read_10x_h5(spot_exp_path)
+                except Exception as e:
+                    raise ValueError(f"Unsupported file format for spot_exp_path: {e}")
+
+        elif '.csv' in spot_exp_path:
+            adata = sc.read_csv(spot_exp_path)
+        else:
+            try:
+                adata = sc.read(spot_exp_path)
+            except Exception as e:
+                raise ValueError(f"Unsupported file format for spot_exp_path: {e}")
 
         spot_coord = pd.read_csv(spot_coord_path, index_col=0)
         spot_coord[['x_coord', 'y_coord']] = spot_coord.iloc[:, -2:]
