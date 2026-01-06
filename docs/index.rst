@@ -30,7 +30,7 @@ Key Features of SpaHDmap
 Getting started with SpaHDmap
 ================================
 To quickly get started with SpaHDmap, please refer to the :doc:`installation` and :doc:`tutorials/index`.
-For more details, please refer to our `manuscript <https://www.biorxiv.org/content/10.1101/2024.09.12.612666>`_.
+For more details, please refer to our `paper <https://www.nature.com/articles/s41556-025-01838-z>`_.
 
 .. toctree::
    :caption: General
@@ -48,5 +48,5 @@ For more details, please refer to our `manuscript <https://www.biorxiv.org/conte
     :hidden:
 
     GitHub <https://github.com/sldyns/SpaHDmap>
-    Manuscript <https://www.biorxiv.org/content/10.1101/2024.09.12.612666>
+    Paper <https://www.nature.com/articles/s41556-025-01838-z>
     Xi Lab <https://www.math.pku.edu.cn/teachers/xirb/Homepage.html>

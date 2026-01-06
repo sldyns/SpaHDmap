@@ -13,7 +13,7 @@ Based on the high-definition embedding and the reconstruction of gene expression
 high-definition downstream analyses, such as spatial domain detection, gene expression recovery, and identification of
 embedding-associated genes as well as high-definition cluster-associated genes.
 
-For more details, please refer to our [manuscript](https://www.biorxiv.org/content/10.1101/2024.09.12.612666).
+For more details, please refer to our [paper](https://www.nature.com/articles/s41556-025-01838-z).
 
 ## Installation
 Please install `SpaHDmap` from pypi with:
@@ -39,3 +39,14 @@ Please refer to the [documentation](https://spahdmap.readthedocs.io/en/latest/) 
 
 ## License
 This software package is licensed under MIT license. For commercial use, please contact [Ruibin Xi](ruibinxi@math.pku.edu.cn).
+
+## Citation
+If you use SpaHDmap in your research, please cite the following paper:
+```
+@article{tang2026interpretable,
+  title={The interpretable multimodal dimension reduction framework SpaHDmap enhances resolution in spatial transcriptomics},
+  author={Tang, Junjie and Chen, Zihao and Qian, Kun and Huang, Siyuan and He, Yang and Yin, Shenyi and He, Xinyu and Ye, Buqing and Zhuang, Yan and Meng, Hongxue and Ji, Jianzhong Jeff and Xi, Ruibin},
+  journal={Nature Cell Biology},
+  year={2026}
+}
+```
