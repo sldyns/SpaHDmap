@@ -12,7 +12,8 @@ def cluster_score(section: Union[STData, List[STData]],
                  resolution: float = 0.8,
                  n_neighbors: int = 50,
                  scale: float = 4.,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 joint: bool = True):
     """
     Perform clustering on spatial transcriptomics score data.
 
@@ -30,41 +31,100 @@ def cluster_score(section: Union[STData, List[STData]],
         Scale factor for resizing score.
     verbose
         Whether to print progress
+    joint
+        Whether to cluster spots/pixels jointly across sections
 
     """
     if verbose: print(f"*** Performing clustering using {use_score} scores... ***")
     
     sections = [section] if isinstance(section, STData) else section
-    
+
     for section in sections:
         if section.scores[use_score] is None:
             raise ValueError(f"Score {use_score} not available for section {section.section_name}")
-            
+
+    if joint and len(sections) > 1:
         if use_score == 'SpaHDmap':
-            # Use pre-calculated spot score if available
+            spot_scores = [section.scores['SpaHDmap_spot'] for section in sections]
+            spot_score_all = np.vstack(spot_scores)
+            spot_labels_all = _perform_louvain_clustering(
+                spot_score_all,
+                resolution,
+                n_neighbors
+            )
+            score_scaled_list = []
+            mask_scaled_list = []
+            for section in sections:
+                mask_scaled = cv2.resize(section.mask.astype(np.uint8),
+                                         (int(section.mask.shape[1] / scale),
+                                          int(section.mask.shape[0] / scale)),
+                                         cv2.INTER_NEAREST).astype(bool)
+                score = section.scores[use_score]
+                score_scaled = np.zeros((score.shape[0],
+                                         int(score.shape[1] / scale),
+                                         int(score.shape[2] / scale)))
+                for i in range(score.shape[0]):
+                    score_layer = score[i].astype(np.float32)
+                    score_scaled[i] = cv2.resize(score_layer,
+                                                 (int(score.shape[2] / scale),
+                                                  int(score.shape[1] / scale)))
+                score_scaled_list.append(score_scaled)
+                mask_scaled_list.append(mask_scaled)
+
+            pixel_labels_list = _extend_clustering_to_pixels_joint(
+                scores=score_scaled_list,
+                masks=mask_scaled_list,
+                spot_score=spot_score_all,
+                labels=spot_labels_all
+            )
+        else:
+            spot_scores = [section.scores[use_score] for section in sections]
+            spot_score_all = np.vstack(spot_scores)
+            spot_labels_all = _perform_louvain_clustering(
+                spot_score_all,
+                resolution,
+                n_neighbors
+            )
+            pixel_labels_list = [None] * len(sections)
+
+        offset = 0
+        for index, section in enumerate(sections):
+            length = spot_scores[index].shape[0]
+            spot_labels = spot_labels_all[offset:offset + length]
+            offset += length
+            if use_score == 'SpaHDmap':
+                section.clusters[use_score] = {
+                    'spot': spot_labels,
+                    'pixel': pixel_labels_list[index]
+                }
+            else:
+                section.clusters[use_score] = spot_labels
+            if verbose:
+                n_clusters = len(np.unique(spot_labels))
+                print(f"Found {n_clusters} clusters for section {section.section_name}")
+        return
+
+    for section in sections:
+        if use_score == 'SpaHDmap':
             spot_score = section.scores['SpaHDmap_spot']
 
-            # Resize mask
-            mask_scaled = cv2.resize(section.mask.astype(np.uint8), 
-                                   (int(section.mask.shape[1]/scale), 
-                                    int(section.mask.shape[0]/scale)),
-                                   cv2.INTER_NEAREST).astype(bool)
+            mask_scaled = cv2.resize(section.mask.astype(np.uint8),
+                                     (int(section.mask.shape[1] / scale),
+                                      int(section.mask.shape[0] / scale)),
+                                     cv2.INTER_NEAREST).astype(bool)
 
-            # Get the cropped and scaled score
             score = section.scores[use_score]
 
-            # Scale the score
             score_scaled = np.zeros((score.shape[0],
-                                   int(score.shape[1]/scale),
-                                   int(score.shape[2]/scale)))
+                                     int(score.shape[1] / scale),
+                                     int(score.shape[2] / scale)))
 
             for i in range(score.shape[0]):
                 score_layer = score[i].astype(np.float32)
                 score_scaled[i] = cv2.resize(score_layer,
-                                           (int(score.shape[2]/scale),
-                                            int(score.shape[1]/scale)))
+                                             (int(score.shape[2] / scale),
+                                              int(score.shape[1] / scale)))
 
-            # Use scaled score and mask for clustering
             spot_labels = _perform_louvain_clustering(
                 spot_score,
                 resolution,
@@ -79,15 +139,12 @@ def cluster_score(section: Union[STData, List[STData]],
             )
         else:
             spot_score = section.scores[use_score]
-            
-            # Perform Louvain clustering
             spot_labels = _perform_louvain_clustering(
                 spot_score,
                 resolution,
                 n_neighbors
             )
-        
-        # For SpaHDmap, also get pixel-level clusters
+
         if use_score == 'SpaHDmap':
             section.clusters[use_score] = {
                 'spot': spot_labels,
@@ -145,3 +202,45 @@ def _extend_clustering_to_pixels(score: np.ndarray,
     labels[valid_pixels] = pixel_labels
     
     return labels
+
+def _extend_clustering_to_pixels_joint(scores: List[np.ndarray],
+                                       masks: List[np.ndarray],
+                                       spot_score: np.ndarray,
+                                       labels: np.ndarray) -> List[np.ndarray]:
+    """Extend spot-level clustering to pixel level using joint KMeans."""
+
+    pixel_scores_list = []
+    pixel_counts = []
+    valid_pixels_list = []
+    for score, mask in zip(scores, masks):
+        valid_pixels = np.where(mask)
+        pixel_scores = score[:, valid_pixels[0], valid_pixels[1]].T
+        pixel_scores_list.append(pixel_scores)
+        pixel_counts.append(pixel_scores.shape[0])
+        valid_pixels_list.append(valid_pixels)
+
+    pixel_scores_all = np.concatenate(pixel_scores_list, axis=0)
+
+    n_clusters = len(np.unique(labels))
+    initial_centers = np.zeros((n_clusters, scores[0].shape[0]))
+    for i in range(n_clusters):
+        spots_in_cluster = spot_score[labels == i]
+        initial_centers[i] = np.mean(spots_in_cluster, axis=0)
+
+    kmeans = KMeans(n_clusters=n_clusters,
+                    init=initial_centers,
+                    random_state=123,
+                    algorithm="elkan",
+                    max_iter=500)
+    pixel_labels_all = kmeans.fit_predict(pixel_scores_all)
+
+    pixel_labels_list = []
+    offset = 0
+    for mask, valid_pixels, count in zip(masks, valid_pixels_list, pixel_counts):
+        labels_slice = pixel_labels_all[offset:offset + count]
+        offset += count
+        labels_map = np.full(mask.shape, -1)
+        labels_map[valid_pixels] = labels_slice
+        pixel_labels_list.append(labels_map)
+
+    return pixel_labels_list

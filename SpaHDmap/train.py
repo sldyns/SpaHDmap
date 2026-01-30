@@ -1361,6 +1361,7 @@ class Mapper:
                 use_score: str = 'SpaHDmap',
                 resolution: float = 0.8,
                 n_neighbors: int = 50,
+                joint: bool = True,
                 format: str = 'png',
                 show: bool = True):
         """
@@ -1376,6 +1377,8 @@ class Mapper:
             Resolution parameter for Louvain clustering.
         n_neighbors
             Number of neighbors for graph construction.
+        joint
+            Whether to cluster spots/pixels jointly across sections.
         format
             Output format for visualization ('jpg', 'png', 'pdf').
         show
@@ -1395,6 +1398,7 @@ class Mapper:
             use_score=use_score,
             resolution=resolution,
             n_neighbors=n_neighbors,
+            joint=joint,
             verbose=self.verbose
         )
 
