@@ -105,6 +105,22 @@ class HE_Dataset(Dataset):
             self.radius (int): Radius within which to find coordinates.
         """
 
+        # Pre-compute relative coordinate candidates for _find_coord_within_radius
+        # Use a safe radius that accounts for center offset up to sqrt(2)/2 ≈ 0.707
+        # This ensures no valid points are missed when center is not at integer position
+        width = int(math.ceil(self.radius)) + 1
+        rows = np.arange(-width, width + 1)
+        cols = np.arange(-width, width + 1)
+        row_grid, col_grid = np.meshgrid(rows, cols, indexing='ij')
+        
+        # Use safe_radius to include all potentially valid points
+        # When center offsets by at most 0.5 in each direction, diagonal offset is sqrt(0.5^2+0.5^2) ≈ 0.707
+        safe_radius_sq = (self.radius + 0.71) ** 2
+        candidate_mask = (row_grid ** 2 + col_grid ** 2) <= safe_radius_sq
+        
+        self._rel_rows = row_grid[candidate_mask]
+        self._rel_cols = col_grid[candidate_mask]
+
     def __getitem__(self, idx):
         """
         Get the data for the given index.
@@ -171,24 +187,23 @@ class HE_Dataset(Dataset):
         """
 
         coord_within_radius = []
+        radius_sq = self.radius ** 2
+        
         for center in center_coord:
-            row_min = math.ceil(center[0] - self.radius)
-            row_max = math.floor(center[0] + self.radius)
-            col_min = math.ceil(center[1] - self.radius)
-            col_max = math.floor(center[1] + self.radius)
-
-            rows = np.arange(row_min, row_max + 1, dtype=int)
-            cols = np.arange(col_min, col_max + 1, dtype=int)
-
-            row_coord, col_coord = np.meshgrid(rows, cols, indexing='ij')
-            row_coord_flat = row_coord.ravel()
-            col_coord_flat = col_coord.ravel()
-
-            distances = np.sqrt((row_coord_flat - center[0]) ** 2 + (col_coord_flat - center[1]) ** 2)
-            valid_indices = distances <= self.radius
-
-            valid_coord = np.vstack((row_coord_flat[valid_indices], col_coord_flat[valid_indices]))
+            # Use pre-computed relative coordinates, shifted to actual center position
+            r_int = int(round(center[0]))
+            c_int = int(round(center[1]))
+            
+            rows_cand = self._rel_rows + r_int
+            cols_cand = self._rel_cols + c_int
+            
+            # Precise distance check to ensure exact same results as original
+            dist_sq = (rows_cand - center[0]) ** 2 + (cols_cand - center[1]) ** 2
+            valid_mask = dist_sq <= radius_sq
+            
+            valid_coord = np.vstack((rows_cand[valid_mask], cols_cand[valid_mask]))
             coord_within_radius.append(valid_coord)
+            
         return coord_within_radius
 
     def get_feasible_coord(self,
