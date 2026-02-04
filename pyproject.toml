@@ -3,7 +3,7 @@ requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "SpaHDmap"
+name = "spahdmap"
 version = "0.1.5"
 description = "Interpretable high-definition dimension reduction of spatial transcriptomics data by SpaHDmap"
 readme = "README.md"
@@ -78,8 +78,9 @@ docs = [
 [project.urls]
 Homepage = "https://github.com/sldyns/SpaHDmap"
 
-[tool.setuptools]
-packages = ["SpaHDmap"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["SpaHDmap*"]
 
 [tool.setuptools.package-data]
 SpaHDmap = ["utils/*", "data/*", "model/*"]
