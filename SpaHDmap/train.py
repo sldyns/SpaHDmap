@@ -82,20 +82,23 @@ class Mapper:
         self.ratio_pseudo_spots = ratio_pseudo_spots
 
         self.section = {section.section_name: section} if isinstance(section, STData) else {s.section_name: s for s in section}
+        if not self.section:
+            raise ValueError("`section` must contain at least one STData object.")
+        first_section = next(iter(self.section.values()))
 
         # Get the tissue splits and create pseudo spots
         self.scale_split_size = scale_split_size
         if self.verbose: print('*** Preparing the tissue splits and creating pseudo spots... ***')
 
-        if self.section[list(self.section.keys())[0]].scores['SpaHDmap'] is None:
+        if first_section.scores.get('SpaHDmap') is None:
             self._process_data()
         else:
-            self.genes = self.section[list(self.section.keys())[0]].genes
+            self.genes = first_section.genes
             self.num_genes = len(self.genes)
 
         self.reference = reference
 
-        self.num_channels = self.section[list(self.section.keys())[0]].image.shape[0]
+        self.num_channels = first_section.image.shape[0]
 
         self.results_path = results_path
         for section_name, section in self.section.items():
