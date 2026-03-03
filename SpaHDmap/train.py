@@ -83,7 +83,7 @@ class Mapper:
 
         self.section = {section.section_name: section} if isinstance(section, STData) else {s.section_name: s for s in section}
         if not self.section:
-            raise ValueError("`section` must contain at least one STData object.")
+            raise ValueError("At least one STData section must be provided during Mapper initialization.")
         first_section = next(iter(self.section.values()))
 
         # Get the tissue splits and create pseudo spots
@@ -98,6 +98,8 @@ class Mapper:
 
         self.reference = reference
 
+        if first_section.image is None:
+            raise ValueError("`section.image` must be available before initializing Mapper.")
         self.num_channels = first_section.image.shape[0]
 
         self.results_path = results_path
