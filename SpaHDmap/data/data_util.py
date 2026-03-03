@@ -227,10 +227,10 @@ class STData:
         image = (image / np.max(image, axis=(0, 1), keepdims=True)).astype(np.float32)
 
         hires_shape = (math.ceil(image.shape[0] / self.scale_rate), math.ceil(image.shape[1] / self.scale_rate))
-        lowres_shape = (math.ceil(image.shape[0] / 16), math.ceil(image.shape[1] / 16))
+        lowres_shape = (math.ceil(hires_shape[0] / 16), math.ceil(hires_shape[1] / 16))
 
         hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32) if self.scale_rate != 1 else image
-        lowres_image = cv2.resize(image, (lowres_shape[1], lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
+        lowres_image = cv2.resize(hires_image, (lowres_shape[1], lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
 
         self.image_type = _classify_image_type(lowres_image) if image_type is None else image_type
         print(f"Processing image, seems to be {self.image_type} image.")
