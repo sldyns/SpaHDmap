@@ -656,6 +656,8 @@ def prepare_stdata(section_name: str = None,
         elif spot_coord_path.endswith('.parquet'):
             import pyarrow.parquet as pq
             spot_coord = pq.read_table(spot_coord_path).to_pandas()
+            spot_coord.set_index(spot_coord.columns[0], inplace=True)
+            spot_coord.drop(columns=spot_coord.columns[0], inplace=True)
         else:
             raise ValueError("Unsupported file format for spot_coord_path. We suggest transforming the spot coordinates into a .csv file with spot names as index and x/y coordinates as the last two columns.")
 
