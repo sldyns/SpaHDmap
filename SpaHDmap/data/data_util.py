@@ -651,7 +651,14 @@ def prepare_stdata(section_name: str = None,
             except Exception as e:
                 raise ValueError(f"Unsupported file format for spot_exp_path: {e}")
 
-        spot_coord = pd.read_csv(spot_coord_path, index_col=0)
+        if spot_coord_path.endswith('.csv'):
+            spot_coord = pd.read_csv(spot_coord_path, index_col=0)
+        elif spot_coord_path.endswith('.parquet'):
+            import pyarrow.parquet as pq
+            spot_coord = pq.read_table(spot_coord_path).to_pandas()
+        else:
+            raise ValueError("Unsupported file format for spot_coord_path. We suggest transforming the spot coordinates into a .csv file with spot names as index and x/y coordinates as the last two columns.")
+
         spot_coord[['x_coord', 'y_coord']] = spot_coord.iloc[:, -2:]
         spot_coord = spot_coord[['x_coord', 'y_coord']]
 
