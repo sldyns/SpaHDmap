@@ -107,6 +107,11 @@ Usage Examples:
   %(prog)s -c config.json --vis_format pdf  # Save plots as PDF
   %(prog)s -c config.json --color_norm true # Enable color normalization
 
+Configuration note:
+  In config.json, `paras.scale_rate` is relative to each section's `image_path`.
+  If you want a physical target like 0.5 um/px, point `image_path` to the
+  original full-resolution image and compute `scale_rate` from that image.
+
 For more information: https://github.com/sldyns/SpaHDmap
         """
     )
@@ -413,4 +418,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

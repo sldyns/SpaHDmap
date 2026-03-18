@@ -18,6 +18,74 @@ from .sparkx import sparkx
 from .bsp import bsp
 from .color_normalize import color_normalize
 
+
+def _compute_scaled_bbox(spot_coord: np.ndarray,
+                         radius: int,
+                         shape: Tuple[int, int]) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    """
+    Compute a clamped bounding box for scaled spot coordinates.
+
+    Parameters
+    ----------
+    spot_coord
+        Spot coordinates in the same scale as ``shape``.
+    radius
+        Spot radius in the same scale as ``shape``.
+    shape
+        Target image shape as ``(height, width)``.
+    """
+    min_coords = spot_coord.min(0).astype(int)
+    max_coords = spot_coord.max(0).astype(int)
+    row_range = (max(0, min_coords[0] - radius), min(shape[0], max_coords[0] + radius + 1))
+    col_range = (max(0, min_coords[1] - radius), min(shape[1], max_coords[1] + radius + 1))
+    return row_range, col_range
+
+
+def _estimate_background_value(lowres_image: np.ndarray,
+                               binary_mask: np.ndarray,
+                               outer_mask: np.ndarray) -> np.ndarray:
+    """
+    Estimate the background color for mask generation from the outer region.
+
+    Falls back to the global image median when the scaled bounding box fully
+    consumes the low-resolution canvas.
+    """
+    background_class = outer_mask & binary_mask
+    foreground_class = outer_mask & ~binary_mask
+
+    if not np.any(background_class) and not np.any(foreground_class):
+        warnings.warn(
+            "No outer-region pixels are available for background estimation after scaling. "
+            "Falling back to the global image median."
+        )
+        return np.median(lowres_image.reshape(-1, lowres_image.shape[-1]), axis=0)
+
+    if not np.any(background_class):
+        return np.median(lowres_image[foreground_class], axis=0)
+
+    if not np.any(foreground_class):
+        return np.median(lowres_image[background_class], axis=0)
+
+    outer_pixels = cv2.cvtColor(lowres_image, cv2.COLOR_RGB2GRAY)[outer_mask]
+    var_background = np.var(outer_pixels[binary_mask[outer_mask]])
+    var_foreground = np.var(outer_pixels[~binary_mask[outer_mask]])
+    selected = background_class if var_background < var_foreground else foreground_class
+    return np.median(lowres_image[selected], axis=0)
+
+
+def _extract_spatial_coords_from_table(spot_coord: pd.DataFrame) -> pd.DataFrame:
+    """
+    Extract spatial coordinates from the last two columns of a spot table.
+
+    This keeps the loader format-agnostic. If an input table stores pixel
+    coordinates in ``row, col`` order, callers should pass ``swap_coord=False``
+    when preparing the section.
+    """
+    coords = spot_coord.iloc[:, -2:].copy()
+    coords.columns = ['x_coord', 'y_coord']
+    return coords
+
+
 class STData:
     """
     A class for handling and managing spatial transcriptomics data.
@@ -71,6 +139,7 @@ class STData:
         # Initialize the STData object
         self.section_name = section_name
         self.scale_rate = scale_rate
+        self.original_radius = radius
         self.radius = round(radius / scale_rate)
         self.kernel_size = self.radius // 2 * 2 + 1
 
@@ -219,43 +288,38 @@ class STData:
         # Process the spot coordinates
         self.spot_coord = spot_coord / self.scale_rate - 1
         self.num_spots = self.spot_coord.shape[0]
-        min_coords, max_coords = self.spot_coord.min(0).astype(int), self.spot_coord.max(0).astype(int)
-        tmp_row_range = (max(0, min_coords[0] - self.radius), min(image.shape[0], max_coords[0] + self.radius + 1))
-        tmp_col_range = (max(0, min_coords[1] - self.radius), min(image.shape[1], max_coords[1] + self.radius + 1))
 
         # Process the image
         image = (image / np.max(image, axis=(0, 1), keepdims=True)).astype(np.float32)
 
         hires_shape = (math.ceil(image.shape[0] / self.scale_rate), math.ceil(image.shape[1] / self.scale_rate))
-        lowres_shape = (math.ceil(hires_shape[0] / 16), math.ceil(hires_shape[1] / 16))
+        bg_lowres_shape = (math.ceil(image.shape[0] / 16), math.ceil(image.shape[1] / 16))
+        tmp_row_range, tmp_col_range = _compute_scaled_bbox(self.spot_coord, self.radius, hires_shape)
+        original_radius = getattr(self, 'original_radius', max(1, round(self.radius * self.scale_rate)))
+        original_spot_coord = spot_coord - 1
+        bg_row_range, bg_col_range = _compute_scaled_bbox(original_spot_coord, original_radius, image.shape[:2])
 
         hires_image = cv2.resize(image, (hires_shape[1], hires_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32) if self.scale_rate != 1 else image
-        lowres_image = cv2.resize(hires_image, (lowres_shape[1], lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
+        bg_lowres_image = cv2.resize(image, (bg_lowres_shape[1], bg_lowres_shape[0]), interpolation=cv2.INTER_AREA).astype(np.float32)
 
-        self.image_type = _classify_image_type(lowres_image) if image_type is None else image_type
+        self.image_type = _classify_image_type(bg_lowres_image) if image_type is None else image_type
         print(f"Processing image, seems to be {self.image_type} image.")
 
         self.image = np.transpose(hires_image, (2, 0, 1))
 
         if create_mask:
             # Create masks for outer regions
-            gray = cv2.cvtColor(lowres_image, cv2.COLOR_RGB2GRAY)
+            gray = cv2.cvtColor(bg_lowres_image, cv2.COLOR_RGB2GRAY)
 
             ## Apply Otsu's thresholding
             thresh = filters.threshold_otsu(gray)
             binary_mask = gray > thresh
 
-            outer_mask = np.ones(lowres_shape, dtype=np.bool_)
-            outer_mask[tmp_row_range[0]//16:tmp_row_range[1]//16, tmp_col_range[0]//16:tmp_col_range[1]//16] = 0
+            outer_mask = np.ones(bg_lowres_shape, dtype=np.bool_)
+            outer_mask[bg_row_range[0]//16:bg_row_range[1]//16, bg_col_range[0]//16:bg_col_range[1]//16] = 0
 
-            ## Calculate variance for both classes in the outer region
-            outer_pixels = gray[outer_mask]
-            var_background = np.var(outer_pixels[binary_mask[outer_mask]])
-            var_foreground = np.var(outer_pixels[~binary_mask[outer_mask]])
-
-            ## Determine which class is the background based on lower variance and calculate background value
-            background_pixels = lowres_image[outer_mask & binary_mask] if var_background < var_foreground else lowres_image[outer_mask & ~binary_mask]
-            background_value = np.median(background_pixels, axis=0)
+            ## Determine background value from the remaining outer region
+            background_value = _estimate_background_value(bg_lowres_image, binary_mask, outer_mask)
 
             # Create mask of image
             mask, tmp_mask = np.zeros(hires_shape, dtype=np.bool_), np.zeros(hires_shape, dtype=np.bool_)
@@ -275,6 +339,13 @@ class STData:
 
             ## Get row and column ranges and final mask
             mask_idx = np.where(mask == 1)
+            if mask_idx[0].size == 0 or mask_idx[1].size == 0:
+                warnings.warn(
+                    "Auto-generated tissue mask is empty after scaling. "
+                    "Falling back to the clamped spot bounding box; please verify image_path and scale_rate."
+                )
+                mask = tmp_mask.copy()
+                mask_idx = np.where(mask == 1)
             self.row_range = (np.min(mask_idx[0]), np.max(mask_idx[0]))
             self.col_range = (np.min(mask_idx[1]), np.max(mask_idx[1]))
             self.mask = mask[self.row_range[0]:self.row_range[1], self.col_range[0]:self.col_range[1]]
@@ -567,7 +638,11 @@ def prepare_stdata(section_name: str = None,
     select_hvgs
         Whether to select highly variable genes (HVGs).
     scale_rate
-        The factor by which to scale the image and coordinates.
+        The factor by which to scale the input image and coordinates. This is
+        always interpreted relative to ``image_path``. For example, if you want
+        a target resolution of ``0.5 um/px``, ``image_path`` should point to the
+        original full-resolution image and ``scale_rate`` should be computed
+        against that image's native microns-per-pixel value.
     radius
         The radius of the spots in the original, unscaled image. This is required
         when loading data from `spot_coord_path` and `spot_exp_path`.
@@ -661,8 +736,7 @@ def prepare_stdata(section_name: str = None,
         else:
             raise ValueError("Unsupported file format for spot_coord_path. We suggest transforming the spot coordinates into a .csv file with spot names as index and x/y coordinates as the last two columns.")
 
-        spot_coord[['x_coord', 'y_coord']] = spot_coord.iloc[:, -2:]
-        spot_coord = spot_coord[['x_coord', 'y_coord']]
+        spot_coord = _extract_spatial_coords_from_table(spot_coord)
 
         # get the common index between adata and spot_coord
         common_index = adata.obs_names.intersection(spot_coord.index)
