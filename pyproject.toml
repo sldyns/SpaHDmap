@@ -40,6 +40,7 @@ authors = [
 
 maintainers = [
     {name = "Kun Qian", email = "kunqian@stu.pku.edu.cn"},
+    {name = "Zihao Chen", email = "g.e.challenger@pku.edu.cn"}
 ]
 
 dependencies = [
@@ -74,6 +75,7 @@ docs = [
     "sphinx_copybutton>=0.5.0",
     "sphinx_design>=0.3.0",
 ]
+annoy = ["annoy>=1.17.3"]
 
 [project.urls]
 Homepage = "https://github.com/sldyns/SpaHDmap"
