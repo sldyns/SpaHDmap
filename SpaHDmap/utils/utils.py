@@ -6,6 +6,7 @@ from scipy.spatial import KDTree
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 import scipy.sparse as sp
+from annoy import AnnoyIndex
 
 
 def query_batch(tree,
@@ -143,67 +144,122 @@ def create_pseudo_spots(feasible_domain: np.ndarray,
 
     return pseudo_spots
 
+def find_nn_sim(index, neighbor_index, feature_mat, feature_norm, num):
+    if neighbor_index.size == 0:
+        return np.array([], dtype=int)
+
+    self_feature = feature_mat[index]                 # (d,)
+    neighbor_feature = feature_mat[neighbor_index]    # (n_neighbor, d)
+
+    denom = feature_norm[index] * feature_norm[neighbor_index]
+
+    sim = np.full(neighbor_index.shape[0], -np.inf, dtype=float)
+    valid = denom > 0
+    sim[valid] = neighbor_feature[valid] @ self_feature / denom[valid]
+
+    k = min(num, neighbor_index.shape[0])
+
+    top_local = np.argpartition(-sim, k-1)[:k]
+    top_local = top_local[np.argsort(-sim[top_local])]
+
+    return neighbor_index[top_local]
+
 
 def construct_adjacency_matrix(spot_coord: np.ndarray,
                                spot_embeddings: np.ndarray,
-                               num_sequenced_spots: int,
+                               num_real_spots: int,
                                num_neighbors: int = 50) -> sp.coo_matrix:
     """
     Construct the adjacency matrix for the graph.
 
     Parameters:
-        spot_coord
+        spot_coord (numpy.ndarray):
             Array containing the coordinates of the spots.
-        spot_embeddings
+        spot_embeddings (numpy.ndarray):
             Array containing the embeddings of the spots.
-        num_sequenced_spots
-            The number of sequenced spots in the dataset.
-        num_neighbors
+        num_real_spots (int):
+            The number of real spots in the dataset.
+        num_neighbors (int):
             The number of neighbors to consider for each spot.
 
     Returns:
-        adjacency_matrix (scipy.sparse.coo_matrix): 
+        adjacency_matrix (scipy.sparse.coo_matrix):
             The adjacency matrix of the graph.
     """
 
     num_all_spots = spot_coord.shape[0]
-    num_pseudo_spots = num_all_spots - num_sequenced_spots
+    num_pseudo_spots = num_all_spots - num_real_spots
 
     # Calculate the proportional number of pseudo neighbors
-    num_pseudo_neighbors = math.ceil(num_pseudo_spots / num_sequenced_spots * num_neighbors)
+    num_pseudo_neighbors = math.ceil(num_pseudo_spots / num_real_spots * num_neighbors)
 
-    # Calculate distances and correlation
-    distances = cdist(spot_coord, spot_coord, metric='euclidean')
-    correlation_matrix = np.corrcoef(spot_embeddings)
-
-    # Define ranges for sequenced and pseudo spots
-    sequenced_range = np.arange(num_sequenced_spots)
-    pseudo_range = np.arange(num_sequenced_spots, num_all_spots)
+    # Define ranges for real and pseudo spots
+    real_range = np.arange(num_real_spots)
+    pseudo_range = np.arange(num_real_spots, num_all_spots)
 
     # Initialize the adjacency matrix
     rows, cols, values = [], [], []
-    for index in range(num_all_spots):
-        # Find nearest neighbors based on distance
-        sequenced_indices = sequenced_range[np.argsort(distances[index, sequenced_range])[:num_neighbors]]
-        pseudo_indices = pseudo_range[np.argsort(distances[index, pseudo_range])[:num_pseudo_neighbors]]
 
-        # Select top 2 correlated neighbors from sequenced and pseudo spots
-        if index < num_sequenced_spots:
-            top_sequenced_neighbors = sequenced_indices[np.argsort(-correlation_matrix[index, sequenced_indices])[1:3]]
-            top_pseudo_neighbors = pseudo_indices[np.argsort(-correlation_matrix[index, pseudo_indices])[:2]]
+    spot_embeddings_all_mean = np.mean(spot_embeddings, axis=1, keepdims=True)
+    spot_embeddings_all_centered = spot_embeddings - spot_embeddings_all_mean  ##特征中心化
+    spot_embeddings_all_centered_norm = np.linalg.norm(spot_embeddings_all_centered,
+                                                       axis=1)  # 先算Spot的图像特征的二范数，之后算相似性的时候直接用
+    annoy_real=AnnoyIndex(spot_coord.shape[1],'euclidean')
+    annoy_pseudo=AnnoyIndex(spot_coord.shape[1],'euclidean')
+    annoy_real.set_seed(1234)
+    annoy_pseudo.set_seed(1234)
+    for i in real_range:
+        v=spot_coord[i,:]
+        annoy_real.add_item(i,v)
+    for i in pseudo_range:
+        v=spot_coord[i,:]
+        annoy_pseudo.add_item(i,v)
+    annoy_real.build(10, n_jobs=1)
+    if annoy_pseudo.get_n_items()>0:
+        annoy_pseudo.build(10, n_jobs=1)
+    for index in real_range:
+        nn_real=annoy_real.get_nns_by_item(index, num_neighbors,include_distances=True)[0]
+        nn_real=nn_real[1:]
+        if annoy_pseudo.get_n_items() > 0:
+            nn_pseudo = annoy_pseudo.get_nns_by_vector(spot_coord[index,:], num_pseudo_neighbors, include_distances=True)[0]
         else:
-            top_sequenced_neighbors = sequenced_indices[np.argsort(-correlation_matrix[index, sequenced_indices])[:2]]
-            top_pseudo_neighbors = pseudo_indices[np.argsort(-correlation_matrix[index, pseudo_indices])[1:3]]
-
-        # Combine selections and prepare to update adjacency matrix
-        selected_neighbors = np.hstack((top_sequenced_neighbors, top_pseudo_neighbors))
+            nn_pseudo = np.array([],dtype=np.int64)
+        real_neighbors = find_nn_sim(index, nn_real, spot_embeddings_all_centered, spot_embeddings_all_centered_norm, 2)
+        if len(nn_pseudo)<2:
+            pseudo_neighbors = nn_pseudo
+        else:
+            pseudo_neighbors = find_nn_sim(index, nn_pseudo, spot_embeddings_all_centered, spot_embeddings_all_centered_norm, 2)
+        selected_neighbors = np.hstack((real_neighbors, pseudo_neighbors))
 
         # Collect indices and values to update
         rows.extend([index] * len(selected_neighbors))
         cols.extend(selected_neighbors)
         # value = distances[index, selected_neighbors] / np.sum(distances[index, selected_neighbors])
-        value = 0.25 * np.ones(len(selected_neighbors))
+        va=1/len(selected_neighbors)
+        value = va * np.ones(len(selected_neighbors))
         values.extend(value.tolist())
+    for index in pseudo_range:
+        nn_real=annoy_real.get_nns_by_vector(spot_coord[index,:], num_neighbors,include_distances=True)[0]
+        if annoy_pseudo.get_n_items() > 0:
+            nn_pseudo=annoy_pseudo.get_nns_by_item(index, num_pseudo_neighbors, include_distances=True)[0]
+        else:
+            nn_pseudo = np.array([],dtype=np.int64)
+        real_neighbors=find_nn_sim(index,nn_real,spot_embeddings_all_centered, spot_embeddings_all_centered_norm, 2)
+        if len(nn_pseudo)<3:
+            pseudo_neighbors = nn_pseudo[1:]
+        else:
+            nn_pseudo=nn_pseudo[1:]
+            pseudo_neighbors=find_nn_sim(index,nn_pseudo,spot_embeddings_all_centered, spot_embeddings_all_centered_norm, 2)
+        selected_neighbors = np.hstack((real_neighbors, pseudo_neighbors))
+
+        # Collect indices and values to update
+        rows.extend([index] * len(selected_neighbors))
+        cols.extend(selected_neighbors)
+        # value = distances[index, selected_neighbors] / np.sum(distances[index, selected_neighbors])
+        va=1/len(selected_neighbors)
+        value = va * np.ones(len(selected_neighbors))
+        values.extend(value.tolist())
+
 
     # Construct the adjacency matrix
     adjacency_matrix = sp.coo_matrix((values, (rows, cols)), shape=(num_all_spots, num_all_spots))
