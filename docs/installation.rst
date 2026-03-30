@@ -17,6 +17,12 @@ The easiest way to install SpaHDmap is using pip:
 
 This will install the latest stable version of SpaHDmap along with all its dependencies.
 
+For large dataset, we recommend installing SpaHDmap with `annoy` for faster nearest neighbor search:
+
+.. code-block:: bash
+
+   pip install SpaHDmap[annoy]
+
 From Source
 -----------
 
@@ -55,6 +61,7 @@ SpaHDmap requires Python 3.9 or later. The main dependencies are:
 - imagecodecs>=2023.1.23
 - scipy>=1.13.1
 - seaborn>=0.13.1
+- annoy>=1.17.0 (optional, for approximate nearest neighbor search)
 
 These dependencies will be automatically installed when you install SpaHDmap using pip.
 
