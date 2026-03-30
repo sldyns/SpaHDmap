@@ -780,7 +780,9 @@ class Mapper:
 
     def get_GCN_score(self,
                       GMM_filter: bool = True,
-                      save_score: bool = False):
+                      save_score: bool = False,
+                      use_ann: bool = False,
+                      **kwargs):
         """
         Get the smoothed GCN score for each section.
 
@@ -790,6 +792,10 @@ class Mapper:
             Whether to filter low signal using Gaussian Mixture Model.
         save_score
             Whether to save the GCN score or not.
+        use_ann
+            Whether to use ANN for constructing the adjacency matrix or not.
+        **kwargs
+            Additional arguments for ANN (num_tree and n_jobs).
         """
 
         print('*** Performing GCN... ***')
@@ -806,7 +812,9 @@ class Mapper:
             # Construct the adjacency matrix
             adjacency_matrix = construct_adjacency_matrix(spot_coord=section.all_spot_coord,
                                                           spot_embeddings=all_image_embeddings,
-                                                          num_sequenced_spots=NMF_score.shape[0])
+                                                          num_sequenced_spots=NMF_score.shape[0],
+                                                          use_ann=use_ann,
+                                                          **kwargs)
 
             # Train the GCN
             if self.verbose: print(f'*** Training GCN for {section.section_name}... ***')
@@ -1575,7 +1583,9 @@ class Mapper:
                      load_model: bool = True,
                      visualize: bool = True,
                      format: str = 'png',
-                     repeat_times: int = 1):
+                     repeat_times: int = 1,
+                     use_ann: bool = False,
+                     **kwargs):
         """
         Run the complete SpaHDmap pipeline.
         
@@ -1593,6 +1603,10 @@ class Mapper:
             Output format for visualizations ('jpg', 'png', 'pdf').
         repeat_times
             Number of times to repeat the pipeline with different random initializations.
+        use_ann
+            Whether to use ANN for constructing the adjacency matrix or not.
+        **kwargs
+            Additional arguments for ANN (num_tree and n_jobs).
         """
 
         # If only run once, use the original logic
@@ -1608,7 +1622,7 @@ class Mapper:
 
             # Get the GCN score
             print('Step 3: Train the GCN model')
-            self.get_GCN_score(save_score=save_score)
+            self.get_GCN_score(save_score=save_score, use_ann=use_ann, **kwargs)
             if visualize: self.visualize(use_score='GCN', format=format)
 
             # Get the VD score
@@ -1657,7 +1671,7 @@ class Mapper:
 
                 # Get the GCN score
                 print(f'Step 3-{i+1}: Train the GCN model')
-                self.get_GCN_score(save_score=save_score)
+                self.get_GCN_score(save_score=save_score, use_ann=use_ann, **kwargs)
                 if visualize: self.visualize(use_score='GCN', format=format)
 
                 # Get the VD score
