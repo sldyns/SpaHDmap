@@ -1172,7 +1172,8 @@ class Mapper:
             epoch += 1
 
     def get_SpaHDmap_score(self,
-                           save_score: bool=False):
+                           save_score: bool=False,
+                           filter_mask: bool=True):
         """
         Get the SpaHDmap scores for each section.
 
@@ -1180,6 +1181,8 @@ class Mapper:
         ----------
         save_score
             Whether to save the SpaHDmap scores or not.
+        filter_mask
+            Whether to filter the mask based on the scores or not.
         """
         
         self.model.training_mode = True
@@ -1215,8 +1218,9 @@ class Mapper:
             tmp_score = section.scores['SpaHDmap'] * 255
             tmp_score = tmp_score.astype(np.uint8)
 
-            # Mask out the low signal regions
-            section.mask[np.where(tmp_score.sum(0) < 15)] = 0
+            if filter_mask:
+                # Mask out the low signal regions
+                section.mask[np.where(tmp_score.sum(0) < 15)] = 0
 
         # Convert model back to full precision
         self.model = self.model.float()
